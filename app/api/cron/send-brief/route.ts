@@ -1,31 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbList } from "@/lib/db";
+import { dbList, dbInsert } from "@/lib/db";
 import { sendEmail } from "@/lib/email-sdk";
 import { generateMarketBrief, PresetType } from "@/lib/market-data";
 
-interface UserPreference {
+interface PrefRow {
   id: string;
-  tickers: string[];
-  presets: string[];
-  schedule_days: number[];
-  schedule_time: string;
-  timezone: string;
-  is_active: boolean;
+  data: {
+    tickers: string[];
+    presets: string[];
+    schedule_days: number[];
+    schedule_time: string;
+    timezone: string;
+    is_active: boolean;
+  };
 }
 
 export async function POST(request: NextRequest) {
-  // Cron callbacks receive a short-lived token in the Authorization header
   const embedToken = request.headers.get("authorization")?.replace("Bearer ", "") ?? "";
   if (!embedToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const prefs = await dbList<UserPreference>("user_preferences", {}, embedToken);
+    const rows = await dbList<PrefRow>("user_preferences", {}, embedToken);
 
-    if (prefs.length === 0 || !prefs[0].is_active) {
+    if (rows.length === 0 || !rows[0].data.is_active) {
       return NextResponse.json({ skipped: true, reason: "No active preferences" });
     }
 
-    const pref = prefs[0];
+    const pref = rows[0].data;
     const today = new Date().getDay();
 
     if (!pref.schedule_days.includes(today)) {
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     });
 
     const date = new Date().toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric"
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
 
     await sendEmail(
@@ -49,19 +50,16 @@ export async function POST(request: NextRequest) {
       embedToken,
     );
 
-    // Log the send
-    const { dbInsert } = await import("@/lib/db");
     await dbInsert("email_logs", {
-      tickers: pref.tickers,
-      presets: pref.presets,
-      token_usage: result.tokenUsage,
-      sent_at: new Date().toISOString(),
+      data: {
+        tickers: pref.tickers,
+        presets: pref.presets,
+        token_usage: result.tokenUsage,
+        sent_at: new Date().toISOString(),
+      },
     }, embedToken);
 
-    return NextResponse.json({
-      sent: true,
-      tokenUsage: result.tokenUsage,
-    });
+    return NextResponse.json({ sent: true, tokenUsage: result.tokenUsage });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
