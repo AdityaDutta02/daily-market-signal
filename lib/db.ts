@@ -24,8 +24,13 @@ export async function dbGet<T = Record<string, unknown>>(table: string, id: stri
   return res.json() as Promise<T>;
 }
 
+function generateId(): string {
+  return crypto.randomUUID();
+}
+
 export async function dbInsert<T = Record<string, unknown>>(table: string, row: Record<string, unknown>, embedToken: string): Promise<T> {
-  const res = await dbRequest("POST", table, row, embedToken);
+  const rowWithId = { id: generateId(), ...row };
+  const res = await dbRequest("POST", table, rowWithId, embedToken);
   return res.json() as Promise<T>;
 }
 
