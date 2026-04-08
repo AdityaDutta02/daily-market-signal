@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS items (
-  id         TEXT PRIMARY KEY,
-  data       JSONB NOT NULL DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT ''
 );
