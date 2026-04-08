@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import DOMPurify from "dompurify";
 import { useEmbedToken } from "@/hooks/use-embed-token";
 
 type PresetType = "top_movers" | "stocks_to_watch" | "sector_pulse" | "earnings_radar" | "macro_dashboard";
@@ -43,7 +42,10 @@ const TIMEZONES = [
 
 const POPULAR_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY", "QQQ", "BTC-USD"];
 
-function sanitizeHtml(html: string): string {
+// Lazy-load DOMPurify to avoid SSR issues (it requires window/document)
+async function sanitizeHtml(html: string): Promise<string> {
+  if (typeof window === "undefined") return "";
+  const DOMPurify = (await import("dompurify")).default;
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr", "span", "div",
@@ -68,6 +70,7 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState<BriefResult | null>(null);
+  const [sanitizedPreview, setSanitizedPreview] = useState<string>("");
   const [showPreview, setShowPreview] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -178,6 +181,8 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setPreviewResult(data);
+      const clean = await sanitizeHtml(data.htmlEmail);
+      setSanitizedPreview(clean);
     } catch (err) {
       showToast(`Preview failed: ${err}`, "error");
       setShowPreview(false);
@@ -442,7 +447,7 @@ export default function Home() {
               ) : previewResult ? (
                 <div
                   className="email-preview-content"
-                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewResult.htmlEmail) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizedPreview }}
                 />
               ) : null}
             </div>
