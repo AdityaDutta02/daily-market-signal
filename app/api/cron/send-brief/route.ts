@@ -3,16 +3,9 @@ import { dbList, dbInsert } from "@/lib/db";
 import { sendEmail } from "@/lib/email-sdk";
 import { generateMarketBrief, PresetType } from "@/lib/market-data";
 
-interface PrefRow {
+interface ItemRow {
   id: string;
-  data: {
-    tickers: string[];
-    presets: string[];
-    schedule_days: number[];
-    schedule_time: string;
-    timezone: string;
-    is_active: boolean;
-  };
+  data: Record<string, unknown>;
 }
 
 export async function POST(request: NextRequest) {
@@ -20,21 +13,23 @@ export async function POST(request: NextRequest) {
   if (!embedToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const rows = await dbList<PrefRow>("user_preferences", {}, embedToken);
+    const rows = await dbList<ItemRow>("items", {}, embedToken);
+    const prefRow = rows.find((r) => r.data.type === "preferences");
 
-    if (rows.length === 0 || !rows[0].data.is_active) {
+    if (!prefRow || !prefRow.data.is_active) {
       return NextResponse.json({ skipped: true, reason: "No active preferences" });
     }
 
-    const pref = rows[0].data;
+    const pref = prefRow.data;
     const today = new Date().getDay();
+    const scheduleDays = pref.schedule_days as number[];
 
-    if (!pref.schedule_days.includes(today)) {
+    if (!scheduleDays.includes(today)) {
       return NextResponse.json({ skipped: true, reason: "Not a scheduled day" });
     }
 
     const result = await generateMarketBrief({
-      tickers: pref.tickers,
+      tickers: pref.tickers as string[],
       presets: pref.presets as PresetType[],
       embedToken,
     });
@@ -50,8 +45,9 @@ export async function POST(request: NextRequest) {
       embedToken,
     );
 
-    await dbInsert("email_logs", {
+    await dbInsert("items", {
       data: {
+        type: "email_log",
         tickers: pref.tickers,
         presets: pref.presets,
         token_usage: result.tokenUsage,
