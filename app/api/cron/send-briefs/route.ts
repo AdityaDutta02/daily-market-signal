@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
   }
 
   const currentHour = getISTHour();
-  const rows = await dbList<ItemRow>("items", {}, embedToken);
+  let rows: ItemRow[] = [];
+  try {
+    rows = await dbList<ItemRow>("items", {}, embedToken);
+  } catch {
+    return NextResponse.json({ skipped: true, reason: "No items table yet" });
+  }
   const matchingUsers = rows.filter(
     (r) =>
       r.data.type === "user_preferences" &&
