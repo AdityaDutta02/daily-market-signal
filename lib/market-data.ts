@@ -1,94 +1,90 @@
 import { searchWeb, analyzeWithDeepseek } from "./terminal-ai";
+import {
+  getCachedPreset,
+  setCachedPreset,
+  getCachedCompany,
+  setCachedCompany,
+} from "./cache";
 
-export type PresetType = "top_movers" | "stocks_to_watch" | "sector_pulse" | "earnings_radar" | "macro_dashboard";
+export type PresetType =
+  | "nifty_movers"
+  | "stocks_to_watch"
+  | "sectoral_pulse"
+  | "earnings_radar"
+  | "macro_dashboard";
 
-export interface MarketBriefRequest {
-  tickers: string[];
-  presets: PresetType[];
-  embedToken: string;
+export interface PresetInfo {
+  id: PresetType;
+  name: string;
+  description: string;
 }
 
-export interface MarketBriefResult {
-  brief: string;
-  htmlEmail: string;
-  tokenUsage: {
-    searchTokens: number;
-    analysisTokens: number;
-    totalCredits: number;
-  };
-}
+export const PRESETS: PresetInfo[] = [
+  { id: "nifty_movers", name: "Nifty/Sensex Movers", description: "Top gainers and losers today" },
+  { id: "stocks_to_watch", name: "Stocks to Watch", description: "Trending by volume and news" },
+  { id: "sectoral_pulse", name: "Sectoral Pulse", description: "Nifty sectoral index performance" },
+  { id: "earnings_radar", name: "Earnings Radar", description: "Upcoming results and surprises" },
+  { id: "macro_dashboard", name: "Macro Dashboard", description: "Key Indian macro indicators" },
+];
 
 const PRESET_QUERIES: Record<PresetType, string> = {
-  top_movers: "What are today's top 10 stock market gainers and losers by percentage? Include ticker, price, and % change.",
-  stocks_to_watch: "What stocks are trending today based on unusual volume, momentum, and breaking news? List top 10 with reasons.",
-  sector_pulse: "How are the 11 GICS sectors performing today? List each sector with % change and key drivers.",
-  earnings_radar: "What major companies report earnings this week? Include any recent earnings surprises and their stock impact.",
-  macro_dashboard: "What are today's key macro indicators? Include: S&P 500, Nasdaq, Dow levels/changes, 10-year Treasury yield, VIX, DXY dollar index, WTI oil price, Gold price, and any Fed commentary.",
+  nifty_movers: "Today's top 10 NSE Nifty 50 and Sensex stock gainers and losers by percentage change. Include ticker, price in INR, and % change.",
+  stocks_to_watch: "Which stocks are trending on NSE today by unusual volume, momentum, and breaking news? List top 10 with reasons.",
+  sectoral_pulse: "How are Nifty sectoral indices performing today? Include Bank Nifty, Nifty IT, Pharma, Auto, Metal, Energy, FMCG, Realty with % change and key drivers.",
+  earnings_radar: "What major Indian companies report quarterly earnings this week? Include any recent earnings surprises and their stock impact on NSE.",
+  macro_dashboard: "Today's key Indian market indicators: Nifty 50, Sensex levels and change, Bank Nifty, INR/USD exchange rate, RBI policy stance, Brent crude in INR, MCX Gold price, FII/DII flows.",
 };
 
-export async function generateMarketBrief(req: MarketBriefRequest): Promise<MarketBriefResult> {
-  const { tickers, presets, embedToken } = req;
-  let totalSearchTokens = 0;
-  let totalAnalysisTokens = 0;
-  const searchResults: string[] = [];
+const SECTION_FORMAT_PROMPT = `You are an expert financial analyst writing a section of a morning Indian market brief email.
+Format the data into clean HTML suitable for email clients.
+Use inline styles only. Font: system-ui, -apple-system, sans-serif.
+Colors: #1A1A1A for text, #5B5BD6 for accents, #2E7D32 for positive, #C62828 for negative.
+Use tables with borders for data, bullet points for insights.
+Keep it concise and scannable. Return ONLY the HTML section content, no wrapping body/html tags.`;
 
-  // Fetch data for custom tickers
-  if (tickers.length > 0) {
-    const tickerQuery = `Current stock prices, daily change %, and latest news for: ${tickers.join(", ")}. Include pre-market/after-hours if applicable.`;
-    const tickerResult = await searchWeb(tickerQuery, embedToken);
-    searchResults.push(`## Custom Watchlist\n${tickerResult.choices[0].message.content}`);
-    totalSearchTokens += tickerResult.usage?.total_tokens ?? 0;
-  }
+export async function generatePresetSection(
+  presetId: PresetType,
+  embedToken: string
+): Promise<string> {
+  const cached = await getCachedPreset(presetId, embedToken);
+  if (cached) return cached.html_section;
 
-  // Fetch data for each preset
-  for (const preset of presets) {
-    const query = PRESET_QUERIES[preset];
-    const result = await searchWeb(query, embedToken);
-    const label = preset.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    searchResults.push(`## ${label}\n${result.choices[0].message.content}`);
-    totalSearchTokens += result.usage?.total_tokens ?? 0;
-  }
+  const query = PRESET_QUERIES[presetId];
+  const searchResult = await searchWeb(query, embedToken);
+  const searchData = searchResult.choices[0].message.content;
 
-  const rawData = searchResults.join("\n\n---\n\n");
-
-  // Analyze and format with DeepSeek
+  const label = PRESETS.find((p) => p.id === presetId)?.name ?? presetId;
   const analysisResult = await analyzeWithDeepseek(
-    `You are an expert financial analyst writing a morning market brief email.
-Format the data into a clean, professional email brief with:
-- Executive summary (2-3 sentences)
-- Each section with clear headers, tables where appropriate
-- Key takeaways at the end
-- Use bullet points for readability
-- Include specific numbers, prices, percentages
-- Add brief actionable insights
-Return ONLY the email body content in clean HTML format suitable for email clients.
-Use inline styles. Use a clean, modern design with:
-- Font: system-ui, -apple-system, sans-serif
-- Colors: #1a1a2e for text, #16213e for headers, #0f3460 for accents
-- Light gray (#f5f5f5) backgrounds for data sections
-- Clean tables with borders
-Keep it professional but scannable.`,
-    `Here is today's market data to analyze and format:\n\n${rawData}`,
-    embedToken,
+    SECTION_FORMAT_PROMPT,
+    `Format this "${label}" data into an HTML section with a heading:\n\n${searchData}`,
+    embedToken
   );
+  const htmlSection = analysisResult.choices[0].message.content;
 
-  totalAnalysisTokens += analysisResult.usage?.total_tokens ?? 0;
+  await setCachedPreset(presetId, htmlSection, searchData, embedToken);
+  return htmlSection;
+}
 
-  const htmlEmail = analysisResult.choices[0].message.content;
+export async function generateCompanySection(
+  ticker: string,
+  embedToken: string
+): Promise<string> {
+  const cached = await getCachedCompany(ticker, embedToken);
+  if (cached) return cached.html_section;
 
-  // Credit calculation:
-  // gpt-4o-search-preview: 2 credits per request
-  // deepseek-v3.2: 1 credit per request
-  const searchCalls = (tickers.length > 0 ? 1 : 0) + presets.length;
-  const totalCredits = (searchCalls * 2) + 1; // search calls + 1 analysis call
+  const searchResult = await searchWeb(
+    `Current NSE stock price, daily change percentage, recent news, and analyst outlook for ${ticker}. Include price in INR.`,
+    embedToken
+  );
+  const searchData = searchResult.choices[0].message.content;
 
-  return {
-    brief: rawData,
-    htmlEmail,
-    tokenUsage: {
-      searchTokens: totalSearchTokens,
-      analysisTokens: totalAnalysisTokens,
-      totalCredits,
-    },
-  };
+  const analysisResult = await analyzeWithDeepseek(
+    SECTION_FORMAT_PROMPT,
+    `Format this data for "${ticker}" into a compact HTML section:\n\n${searchData}`,
+    embedToken
+  );
+  const htmlSection = analysisResult.choices[0].message.content;
+
+  await setCachedCompany(ticker, htmlSection, searchData, embedToken);
+  return htmlSection;
 }

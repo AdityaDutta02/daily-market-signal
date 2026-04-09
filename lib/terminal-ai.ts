@@ -44,7 +44,7 @@ export async function searchWeb(
   embedToken: string,
 ): Promise<GatewayResponse> {
   return callGateway("openai/gpt-4o-search-preview", [
-    { role: "system", content: "You are a financial data assistant. Return accurate, current market data. Include specific numbers, percentages, and prices. Always cite your sources." },
+    { role: "system", content: "You are a financial data assistant specializing in Indian equity markets (NSE/BSE). Return accurate, current market data for Indian stocks. Include specific numbers, percentages, and prices in INR. Always cite your sources." },
     { role: "user", content: query },
   ], embedToken);
 }
