@@ -251,6 +251,19 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
     } catch { show("Failed to save.", "error"); } finally { setSaving(false); }
   }
 
+  async function sendPreview() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets: prefs.presets, companies: prefs.companies }) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Preview failed" }));
+        show(err.error ?? "Failed to send preview email", "error");
+      } else {
+        show("Preview sent to your email!");
+      }
+    } catch { show("Failed to send preview.", "error"); } finally { setSaving(false); }
+  }
+
   async function toggleActive() {
     setToggling(true);
     try {
@@ -284,6 +297,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
           <button className={`status-pill${prefs.is_active ? " active" : " paused"}`} onClick={toggleActive} disabled={toggling} style={{ cursor: "pointer", border: "none" }}>
             {prefs.is_active ? "Active" : "Paused"}
           </button>
+          {!editing && <button className="btn btn-secondary" onClick={sendPreview} disabled={saving}>{saving ? <span className="spinner" /> : null}Preview</button>}
           {!editing && <button className="btn btn-secondary" onClick={() => { setDraft(prefs); setEditing(true); }}>Edit</button>}
         </div>
       </div>
