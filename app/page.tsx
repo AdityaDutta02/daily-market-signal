@@ -1,469 +1,353 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useEmbedToken } from "@/hooks/use-embed-token";
 
-type PresetType = "top_movers" | "stocks_to_watch" | "sector_pulse" | "earnings_radar" | "macro_dashboard";
+type PresetType = "nifty_movers" | "stocks_to_watch" | "sectoral_pulse" | "earnings_radar" | "macro_dashboard";
 
-interface TokenUsage {
-  searchTokens: number;
-  analysisTokens: number;
-  totalCredits: number;
+interface Prefs {
+  id?: string;
+  presets: PresetType[];
+  companies: string[];
+  delivery_hour: number;
+  schedule_days: number[];
+  is_active: boolean;
+  setup_complete: boolean;
 }
 
-interface BriefResult {
-  brief: string;
-  htmlEmail: string;
-  tokenUsage: TokenUsage;
+interface Brief {
+  id: string;
+  data: { presets: PresetType[]; companies: string[]; brief_html: string; sent_at: string };
 }
 
-const PRESETS: { id: PresetType; icon: string; name: string; desc: string }[] = [
-  { id: "top_movers", icon: "\u{1F4C8}", name: "Top Movers", desc: "Biggest gainers & losers" },
-  { id: "stocks_to_watch", icon: "\u{1F440}", name: "Stocks to Watch", desc: "Trending by volume & news" },
-  { id: "sector_pulse", icon: "\u{1F3ED}", name: "Sector Pulse", desc: "11 GICS sectors at a glance" },
-  { id: "earnings_radar", icon: "\u{1F4CA}", name: "Earnings Radar", desc: "Upcoming & recent surprises" },
-  { id: "macro_dashboard", icon: "\u{1F30D}", name: "Macro Dashboard", desc: "Yields, VIX, DXY, commodities" },
+const PRESETS: { id: PresetType; name: string; description: string }[] = [
+  { id: "nifty_movers", name: "Nifty/Sensex Movers", description: "Top gainers and losers today" },
+  { id: "stocks_to_watch", name: "Stocks to Watch", description: "Trending by volume and news" },
+  { id: "sectoral_pulse", name: "Sectoral Pulse", description: "Nifty sectoral index performance" },
+  { id: "earnings_radar", name: "Earnings Radar", description: "Upcoming results and surprises" },
+  { id: "macro_dashboard", name: "Macro Dashboard", description: "Key Indian macro indicators" },
 ];
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOURS = [6, 7, 8, 9, 10];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "Europe/London",
-  "Europe/Paris",
-  "Asia/Tokyo",
-  "Asia/Kolkata",
-  "Asia/Shanghai",
-  "Australia/Sydney",
-];
+function ah(token: string) { return { Authorization: "Bearer " + token, "Content-Type": "application/json" }; }
+function fmtHour(h: number) { return h + " AM"; }
+function fmtDays(days: number[]) { return days.map((d) => DAY_LABELS[d]).join(", "); }
+function presetName(id: PresetType) { return PRESETS.find((p) => p.id === id)?.name ?? id; }
 
-const POPULAR_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "SPY", "QQQ", "BTC-USD"];
-
-// Lazy-load DOMPurify to avoid SSR issues (it requires window/document)
 async function sanitizeHtml(html: string): Promise<string> {
   if (typeof window === "undefined") return "";
   const DOMPurify = (await import("dompurify")).default;
   return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: [
-      "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr", "span", "div",
-      "table", "thead", "tbody", "tr", "th", "td",
-      "ul", "ol", "li", "strong", "em", "b", "i", "a", "img",
-    ],
-    ALLOWED_ATTR: ["style", "href", "src", "alt", "class", "colspan", "rowspan", "width"],
+    ALLOWED_TAGS: ["h1","h2","h3","h4","h5","h6","p","br","hr","span","div","table","thead","tbody","tr","th","td","ul","ol","li","strong","em","b","i","a","img"],
+    ALLOWED_ATTR: ["style","href","src","alt","class","colspan","rowspan","width"],
   });
 }
 
-export default function Home() {
-  const embedToken = useEmbedToken();
-
-  const [tickers, setTickers] = useState<string[]>([]);
-  const [tickerInput, setTickerInput] = useState("");
-  const [selectedPresets, setSelectedPresets] = useState<PresetType[]>([]);
-  const [scheduleDays, setScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [scheduleTime, setScheduleTime] = useState("08:00");
-  const [timezone, setTimezone] = useState("America/New_York");
-  const [isActive, setIsActive] = useState(false);
-
-  const [saving, setSaving] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
-  const [previewResult, setPreviewResult] = useState<BriefResult | null>(null);
-  const [sanitizedPreview, setSanitizedPreview] = useState<string>("");
-  const [showPreview, setShowPreview] = useState(false);
+function useToast() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
+  const show = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+  return { toast, show };
+}
+
+function PresetGrid({ selected, onToggle }: { selected: PresetType[]; onToggle: (id: PresetType) => void }) {
+  return (
+    <div className="preset-grid">
+      {PRESETS.map((p) => (
+        <div key={p.id} className={`preset-card${selected.includes(p.id) ? " selected" : ""}`} onClick={() => onToggle(p.id)}>
+          {selected.includes(p.id) && <div className="preset-check">✓</div>}
+          <div className="preset-name">{p.name}</div>
+          <div className="preset-desc">{p.description}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TimeDay({ hour, days, onHour, onDay }: { hour: number; days: number[]; onHour: (h: number) => void; onDay: (d: number) => void }) {
+  return (
+    <>
+      <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Time (IST)</p>
+      <div className="time-selector" style={{ marginBottom: 16 }}>
+        {HOURS.map((h) => <div key={h} className={`time-option${h === hour ? " selected" : ""}`} onClick={() => onHour(h)}>{fmtHour(h)}</div>)}
+      </div>
+      <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Days</p>
+      <div className="day-selector">
+        {[1,2,3,4,5,6].map((d) => <button key={d} className={`day-btn${days.includes(d) ? " selected" : ""}`} onClick={() => onDay(d)}>{DAY_LABELS[d]}</button>)}
+      </div>
+    </>
+  );
+}
+
+function TickerInput({ companies, onAdd, onRemove, token }: { companies: string[]; onAdd: (c: string) => void; onRemove: (c: string) => void; token: string }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!embedToken) return;
-    fetch("/api/preferences", {
-      headers: { Authorization: `Bearer ${embedToken}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data && data.id) {
-          setTickers(data.tickers ?? []);
-          setSelectedPresets(data.presets ?? []);
-          setScheduleDays(data.schedule_days ?? [1, 2, 3, 4, 5]);
-          setScheduleTime(data.schedule_time ?? "08:00");
-          setTimezone(data.timezone ?? "America/New_York");
-          setIsActive(data.is_active ?? false);
-        }
-      })
-      .catch(() => {});
-  }, [embedToken]);
+    if (debRef.current) clearTimeout(debRef.current);
+    if (!query.trim()) { setResults([]); setOpen(false); return; }
+    debRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/tickers/search?q=${encodeURIComponent(query)}`, { headers: ah(token) });
+        const data = await res.json();
+        setResults(data.results ?? []); setOpen(true);
+      } catch { setResults([]); }
+    }, 200);
+  }, [query, token]);
 
-  const addTicker = useCallback(() => {
-    const t = tickerInput.trim().toUpperCase();
-    if (t && !tickers.includes(t)) {
-      setTickers((prev) => [...prev, t]);
-      setTickerInput("");
-    }
-  }, [tickerInput, tickers]);
+  function pick(c: string) { if (!companies.includes(c)) onAdd(c); setQuery(""); setResults([]); setOpen(false); }
 
-  const removeTicker = useCallback((t: string) => {
-    setTickers((prev) => prev.filter((x) => x !== t));
-  }, []);
+  return (
+    <div className="autocomplete-wrapper">
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        {companies.map((c) => <span key={c} className="chip">{c}<button className="chip-remove" onClick={() => onRemove(c)}>x</button></span>)}
+      </div>
+      <input style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text-primary)", fontSize: 14 }}
+        placeholder={companies.length >= 3 ? "Max 3 companies" : "Search NSE company (e.g. RELIANCE)"}
+        value={query} disabled={companies.length >= 3}
+        onChange={(e) => setQuery(e.target.value)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onFocus={() => results.length > 0 && setOpen(true)} />
+      {open && results.length > 0 && (
+        <div className="autocomplete-dropdown">
+          {results.map((r) => <div key={r} className="autocomplete-option" onMouseDown={() => pick(r)}>{r}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const togglePreset = useCallback((id: PresetType) => {
-    setSelectedPresets((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }, []);
+function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (p: Prefs) => void; show: (m: string, t?: "success" | "error") => void }) {
+  const [step, setStep] = useState(0);
+  const [presets, setPresets] = useState<PresetType[]>([]);
+  const [companies, setCompanies] = useState<string[]>([]);
+  const [hour, setHour] = useState(8);
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [sendPreview, setSendPreview] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const toggleDay = useCallback((day: number) => {
-    setScheduleDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
-    );
-  }, []);
+  function togglePreset(id: PresetType) {
+    setPresets((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 2 ? prev : [...prev, id]);
+  }
+  function toggleDay(d: number) {
+    setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b));
+  }
 
-  const savePreferences = useCallback(async () => {
-    if (!embedToken) return;
+  async function activate() {
     setSaving(true);
     try {
-      await fetch("/api/preferences", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${embedToken}`,
-        },
-        body: JSON.stringify({
-          tickers,
-          presets: selectedPresets,
-          schedule_days: scheduleDays,
-          schedule_time: scheduleTime,
-          timezone,
-          is_active: true,
-        }),
-      });
+      const body = { presets, companies, delivery_hour: hour, schedule_days: days, is_active: true, setup_complete: true };
+      await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify(body) });
+      await fetch("/api/schedule", { method: "POST", headers: ah(token), body: JSON.stringify({}) });
+      if (sendPreview) {
+        await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets, companies }) });
+        show("Preview sent to your email!");
+      } else {
+        show("Setup complete! Your brief is scheduled.");
+      }
+      onComplete({ presets, companies, delivery_hour: hour, schedule_days: days, is_active: true, setup_complete: true });
+    } catch { show("Setup failed. Please try again.", "error"); }
+    finally { setSaving(false); }
+  }
 
-      await fetch("/api/schedule", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${embedToken}`,
-        },
-        body: JSON.stringify({ schedule_time: scheduleTime, timezone }),
-      });
+  const g = (content: React.ReactNode) => <div className="wizard-container"><div className="wizard-card">
+    <div className="wizard-steps">{[0,1,2,3,4].map((i) => <div key={i} className={`wizard-dot${i===step?" active":i<step?" completed":""}`} />)}</div>
+    {content}
+  </div></div>;
 
-      setIsActive(true);
-      showToast("Schedule saved! Your market brief is active.");
-    } catch {
-      showToast("Failed to save preferences", "error");
-    } finally {
-      setSaving(false);
-    }
-  }, [embedToken, tickers, selectedPresets, scheduleDays, scheduleTime, timezone, showToast]);
+  if (step === 0) return g(<>
+    <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 12, color: "var(--text-primary)" }}>Daily Market Signal</h1>
+    <p style={{ color: "var(--text-secondary)", marginBottom: 32, lineHeight: 1.6 }}>Your personalized Indian market brief, delivered every morning.</p>
+    <div className="wizard-actions"><button className="btn btn-primary btn-full" onClick={() => setStep(1)}>Get Started</button></div>
+  </>);
 
-  const generatePreview = useCallback(async () => {
-    if (!embedToken) return;
-    if (tickers.length === 0 && selectedPresets.length === 0) {
-      showToast("Select at least one ticker or preset", "error");
-      return;
-    }
-    setPreviewing(true);
-    setShowPreview(true);
-    setPreviewResult(null);
+  if (step === 1) return g(<>
+    <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, color: "var(--text-primary)" }}>Choose your market sections</h2>
+    <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: 14 }}>Select up to 2 presets for your daily brief</p>
+    <PresetGrid selected={presets} onToggle={togglePreset} />
+    <div className="wizard-actions" style={{ marginTop: 20 }}>
+      <button className="btn btn-ghost" onClick={() => setStep(0)}>Back</button>
+      <button className="btn btn-primary" onClick={() => setStep(2)} disabled={presets.length === 0}>Continue</button>
+    </div>
+  </>);
+
+  if (step === 2) return g(<>
+    <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, color: "var(--text-primary)" }}>Track specific companies</h2>
+    <p style={{ color: "var(--text-secondary)", marginBottom: 20, fontSize: 14 }}>Add up to 3 NSE-listed companies (optional)</p>
+    <TickerInput companies={companies} onAdd={(c) => setCompanies((p) => [...p, c])} onRemove={(c) => setCompanies((p) => p.filter((x) => x !== c))} token={token} />
+    <div className="wizard-actions" style={{ marginTop: 20 }}>
+      <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
+      <button className="btn btn-ghost" onClick={() => setStep(3)}>Skip</button>
+      <button className="btn btn-primary" onClick={() => setStep(3)}>Continue</button>
+    </div>
+  </>);
+
+  if (step === 3) return g(<>
+    <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 16, color: "var(--text-primary)" }}>Choose delivery time</h2>
+    <TimeDay hour={hour} days={days} onHour={setHour} onDay={toggleDay} />
+    <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8, marginBottom: 0 }}>Briefs are sent on NSE market days only</p>
+    <div className="wizard-actions" style={{ marginTop: 20 }}>
+      <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
+      <button className="btn btn-primary" onClick={() => setStep(4)} disabled={days.length === 0}>Continue</button>
+    </div>
+  </>);
+
+  return g(<>
+    <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20, color: "var(--text-primary)" }}>You&apos;re all set!</h2>
+    <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+      {[["Sections", presets.map(presetName).join(", ")], ["Companies", companies.join(", ") || "None"], ["Delivery", fmtHour(hour) + " IST"], ["Days", fmtDays(days)]].map(([k, v]) => (
+        <div key={k} className="settings-row"><span className="settings-label">{k}</span><span className="settings-value">{v}</span></div>
+      ))}
+    </div>
+    <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--text-secondary)", marginBottom: 20, cursor: "pointer" }}>
+      <input type="checkbox" checked={sendPreview} onChange={(e) => setSendPreview(e.target.checked)} /> Send a preview email now
+    </label>
+    <div className="wizard-actions">
+      <button className="btn btn-ghost" onClick={() => setStep(3)}>Back</button>
+      <button className="btn btn-primary" onClick={activate} disabled={saving}>{saving ? <span className="spinner" /> : null}Activate</button>
+    </div>
+  </>);
+}
+
+function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; show: (m: string, t?: "success" | "error") => void }) {
+  const [prefs, setPrefs] = useState<Prefs>(init);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Prefs>(init);
+  const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedHtml, setExpandedHtml] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/briefs", { headers: ah(token) })
+      .then((r) => r.json())
+      .then((data: Brief[]) => setBriefs(Array.isArray(data) ? data.slice().reverse() : []))
+      .catch(() => {});
+  }, [token]);
+
+  async function saveEdits() {
+    setSaving(true);
     try {
-      const res = await fetch("/api/preview-brief", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${embedToken}`,
-        },
-        body: JSON.stringify({ tickers, presets: selectedPresets }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setPreviewResult(data);
-      const clean = await sanitizeHtml(data.htmlEmail);
-      setSanitizedPreview(clean);
-    } catch (err) {
-      showToast(`Preview failed: ${err}`, "error");
-      setShowPreview(false);
-    } finally {
-      setPreviewing(false);
-    }
-  }, [embedToken, tickers, selectedPresets, showToast]);
+      await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify({ ...draft, setup_complete: true }) });
+      await fetch("/api/schedule", { method: "POST", headers: ah(token), body: JSON.stringify({}) });
+      setPrefs(draft); setEditing(false); show("Settings saved.");
+    } catch { show("Failed to save.", "error"); } finally { setSaving(false); }
+  }
 
-  const hasSelections = tickers.length > 0 || selectedPresets.length > 0;
-  const searchCalls = (tickers.length > 0 ? 1 : 0) + selectedPresets.length;
-  const totalCreditsPerRun = searchCalls * 2 + 1;
+  async function toggleActive() {
+    setToggling(true);
+    try {
+      const updated = { ...prefs, is_active: !prefs.is_active };
+      await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify({ ...updated, setup_complete: true }) });
+      setPrefs(updated); show(updated.is_active ? "Brief activated." : "Brief paused.");
+    } catch { show("Failed to update status.", "error"); } finally { setToggling(false); }
+  }
+
+  async function expandBrief(b: Brief) {
+    if (expandedId === b.id) { setExpandedId(null); return; }
+    setExpandedId(b.id);
+    if (!expandedHtml[b.id]) {
+      const clean = await sanitizeHtml(b.data.brief_html ?? "");
+      setExpandedHtml((prev) => ({ ...prev, [b.id]: clean }));
+    }
+  }
+
+  function toggleDraftPreset(id: PresetType) {
+    setDraft((prev) => ({ ...prev, presets: prev.presets.includes(id) ? prev.presets.filter((x) => x !== id) : prev.presets.length >= 2 ? prev.presets : [...prev.presets, id] }));
+  }
+  function toggleDraftDay(d: number) {
+    setDraft((prev) => ({ ...prev, schedule_days: prev.schedule_days.includes(d) ? prev.schedule_days.filter((x) => x !== d) : [...prev.schedule_days, d].sort((a, b) => a - b) }));
+  }
 
   return (
     <div className="app-container">
-      {/* Navigation */}
-      <nav className="nav animate-in">
-        <div className="nav-brand">
-          <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="28" height="28" rx="8" fill="#1a1a2e"/>
-            <path d="M7 18L11 10L15 14L21 7" stroke="#48bb78" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M7 21H21" stroke="#48bb78" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
-          </svg>
-          Daily Market Signal
-        </div>
-        <div className="nav-links">
-          <button className="nav-link active">Dashboard</button>
-          <button
-            className="nav-link"
-            onClick={() => { if (hasSelections) generatePreview(); }}
-          >
-            Preview Brief
+      <div className="dash-header">
+        <div className="dash-title">Daily Market Signal</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button className={`status-pill${prefs.is_active ? " active" : " paused"}`} onClick={toggleActive} disabled={toggling} style={{ cursor: "pointer", border: "none" }}>
+            {prefs.is_active ? "Active" : "Paused"}
           </button>
-          <span className="nav-link" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span className={`status-dot ${isActive ? "status-active" : "status-inactive"}`} />
-            {isActive ? "Active" : "Inactive"}
-          </span>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <div className="hero">
-        <div className="greeting-card animate-in delay-1">
-          <h1>Your Market Brief</h1>
-          <p className="subtitle">
-            AI-powered morning market intelligence, delivered to your inbox.
-          </p>
-          <div className="stat-highlight">
-            {tickers.length + selectedPresets.length}
-          </div>
-          <p className="stat-label">signals configured</p>
-
-          <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
-            <div style={{ padding: "12px 16px", background: "var(--accent-yellow-light)", borderRadius: "var(--radius-sm)", flex: 1 }}>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>{tickers.length}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Tickers</div>
-            </div>
-            <div style={{ padding: "12px 16px", background: "var(--accent-green-light)", borderRadius: "var(--radius-sm)", flex: 1 }}>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>{selectedPresets.length}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Presets</div>
-            </div>
-            <div style={{ padding: "12px 16px", background: "var(--accent-blue-light)", borderRadius: "var(--radius-sm)", flex: 1 }}>
-              <div style={{ fontSize: 24, fontWeight: 800 }}>{scheduleDays.length}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Days/week</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="quick-panel animate-in delay-2">
-          <div className="card-header">
-            <span className="card-title">Quick Setup</span>
-            <span className="card-badge badge-green">Presets</span>
-          </div>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-            Click to add popular tickers instantly
-          </p>
-          <div className="ticker-chips">
-            {POPULAR_TICKERS.map((t) => (
-              <button
-                key={t}
-                className="ticker-chip"
-                style={{
-                  cursor: "pointer",
-                  background: tickers.includes(t) ? "var(--accent-green-light)" : undefined,
-                  borderColor: tickers.includes(t) ? "var(--accent-green)" : undefined,
-                }}
-                onClick={() => {
-                  if (tickers.includes(t)) removeTicker(t);
-                  else setTickers((prev) => [...prev, t]);
-                }}
-              >
-                {tickers.includes(t) ? "\u2713 " : "+"} {t}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            <div className="quick-panel-item" onClick={() => {
-              setSelectedPresets(["top_movers", "macro_dashboard"]);
-              setTickers(["SPY", "QQQ"]);
-              showToast("Quick setup: Index tracker applied");
-            }}>
-              <span>&#9889;</span> Index Tracker — SPY, QQQ + Top Movers & Macro
-            </div>
-            <div className="quick-panel-item" onClick={() => {
-              setSelectedPresets(["top_movers", "stocks_to_watch", "earnings_radar"]);
-              showToast("Quick setup: Active Trader applied");
-            }}>
-              <span>&#128200;</span> Active Trader — Movers, Watch List & Earnings
-            </div>
-            <div className="quick-panel-item" onClick={() => {
-              setSelectedPresets(PRESETS.map((p) => p.id));
-              showToast("Quick setup: Full Brief applied");
-            }}>
-              <span>&#127775;</span> Full Brief — All 5 presets
-            </div>
-          </div>
+          {!editing && <button className="btn btn-secondary" onClick={() => { setDraft(prefs); setEditing(true); }}>Edit</button>}
         </div>
       </div>
 
-      {/* Custom Tickers */}
-      <div className="card animate-in delay-2" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <span className="section-title">Custom Watchlist</span>
-          {tickers.length > 0 && (
-            <span className="card-badge badge-blue">{tickers.length} tickers</span>
-          )}
-        </div>
-        <p className="section-subtitle">Add specific stocks, ETFs, or crypto tickers to track</p>
-        <div className="ticker-chips">
-          {tickers.map((t) => (
-            <span key={t} className="ticker-chip">
-              {t}
-              <span className="remove" onClick={() => removeTicker(t)}>&times;</span>
-            </span>
-          ))}
-        </div>
-        <div className="ticker-input-wrapper">
-          <input
-            className="ticker-input"
-            placeholder="Enter ticker symbol (e.g. AAPL, BTC-USD)"
-            value={tickerInput}
-            onChange={(e) => setTickerInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addTicker(); }}
-          />
-          <button className="btn btn-primary btn-sm" onClick={addTicker}>Add</button>
-        </div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <p style={{ fontWeight: 600, marginBottom: 16, color: "var(--text-primary)" }}>Settings</p>
+        {!editing ? (
+          [["Sections", prefs.presets.map(presetName).join(", ") || "None"], ["Companies", prefs.companies.join(", ") || "None"], ["Delivery", fmtHour(prefs.delivery_hour) + " IST"], ["Days", fmtDays(prefs.schedule_days)]].map(([k, v]) => (
+            <div key={k} className="settings-row"><span className="settings-label">{k}</span><span className="settings-value">{v}</span></div>
+          ))
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10 }}>Sections (up to 2)</p>
+            <div style={{ marginBottom: 20 }}><PresetGrid selected={draft.presets} onToggle={toggleDraftPreset} /></div>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10 }}>Companies (up to 3)</p>
+            <div style={{ marginBottom: 20 }}>
+              <TickerInput companies={draft.companies} onAdd={(c) => setDraft((p) => ({ ...p, companies: [...p.companies, c] }))} onRemove={(c) => setDraft((p) => ({ ...p, companies: p.companies.filter((x) => x !== c) }))} token={token} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <TimeDay hour={draft.delivery_hour} days={draft.schedule_days} onHour={(h) => setDraft((p) => ({ ...p, delivery_hour: h }))} onDay={toggleDraftDay} />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-primary" onClick={saveEdits} disabled={saving || draft.presets.length === 0}>{saving ? <span className="spinner" /> : null}Save</button>
+              <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Presets */}
-      <div className="card animate-in delay-3" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <span className="section-title">Market Presets</span>
-          {selectedPresets.length > 0 && (
-            <span className="card-badge badge-green">{selectedPresets.length} selected</span>
-          )}
-        </div>
-        <p className="section-subtitle">Choose AI-curated market intelligence sections</p>
-        <div className="presets-grid">
-          {PRESETS.map((p) => (
-            <div
-              key={p.id}
-              className={`preset-card ${selectedPresets.includes(p.id) ? "selected" : ""}`}
-              onClick={() => togglePreset(p.id)}
-            >
-              <div className="preset-icon">{p.icon}</div>
-              <div className="preset-name">{p.name}</div>
-              <div className="preset-desc">{p.desc}</div>
+      <div className="card">
+        <p style={{ fontWeight: 600, marginBottom: 16, color: "var(--text-primary)" }}>Previous Briefs</p>
+        {briefs.length === 0 && <p style={{ color: "var(--text-muted)", fontSize: 14 }}>No briefs sent yet.</p>}
+        {briefs.map((b) => (
+          <div key={b.id} className="brief-item" onClick={() => expandBrief(b)} style={{ cursor: "pointer" }}>
+            <div className="brief-date">{new Date(b.data.sent_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
+            <div className="brief-meta">
+              {(b.data.presets ?? []).map(presetName).join(", ")}
+              {b.data.companies?.length > 0 ? " · " + b.data.companies.join(", ") : ""}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Schedule */}
-      <div className="card animate-in delay-4" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <span className="section-title">Delivery Schedule</span>
-          <span className="card-badge badge-yellow">
-            {scheduleTime} {timezone.split("/").pop()?.replace(/_/g, " ")}
-          </span>
-        </div>
-        <p className="section-subtitle">Set when you want your market brief delivered</p>
-        <div className="schedule-grid">
-          <div>
-            <label style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>Days of the week</label>
-            <div className="schedule-days">
-              {DAYS.map((d, i) => (
-                <button
-                  key={d}
-                  className={`day-btn ${scheduleDays.includes(i) ? "selected" : ""}`}
-                  onClick={() => toggleDay(i)}
-                >
-                  {d.charAt(0)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>Delivery time</label>
-            <input type="time" className="time-input" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} />
-            <select className="timezone-select" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Credit estimate */}
-      <div className="card animate-in delay-5" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <span className="section-title">Estimated Cost Per Run</span>
-        </div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ padding: "16px 20px", background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)", flex: 1, minWidth: 160 }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Search calls (gpt-4o-search)</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{searchCalls} calls</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>x 2 credits = {searchCalls * 2} credits</div>
-          </div>
-          <div style={{ padding: "16px 20px", background: "var(--bg-secondary)", borderRadius: "var(--radius-sm)", flex: 1, minWidth: 160 }}>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>Analysis (deepseek-v3.2)</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>1 call</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>x 1 credit = 1 credit</div>
-          </div>
-          <div style={{ padding: "16px 20px", background: "var(--accent-green-light)", borderRadius: "var(--radius-sm)", flex: 1, minWidth: 160 }}>
-            <div style={{ fontSize: 12, color: "#276749", marginBottom: 4 }}>Total per delivery</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "#276749" }}>{totalCreditsPerRun} credits</div>
-            <div style={{ fontSize: 12, color: "#276749" }}>
-              {scheduleDays.length}x/week = {totalCreditsPerRun * scheduleDays.length} credits/week
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="actions-bar animate-in delay-5">
-        <button className="btn btn-primary" onClick={generatePreview} disabled={!hasSelections || previewing}>
-          {previewing ? <span className="spinner" /> : null}
-          Preview Brief
-        </button>
-        <button className="btn btn-green" onClick={savePreferences} disabled={!hasSelections || saving}>
-          {saving ? <span className="spinner" /> : null}
-          {isActive ? "Update Schedule" : "Activate Schedule"}
-        </button>
-      </div>
-
-      {/* Preview Modal */}
-      {showPreview && (
-        <div className="preview-overlay" onClick={() => setShowPreview(false)}>
-          <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="preview-header">
-              <h2>Email Preview</h2>
-              <button className="preview-close" onClick={() => setShowPreview(false)}>&times;</button>
-            </div>
-            <div className="preview-body">
-              {previewing ? (
-                <div style={{ textAlign: "center", padding: 60 }}>
-                  <div className="spinner spinner-dark" style={{ width: 40, height: 40 }} />
-                  <p style={{ marginTop: 16, color: "var(--text-muted)" }}>Fetching live market data & generating brief...</p>
-                  <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>Using gpt-4o-search for data, deepseek-v3.2 for analysis</p>
-                </div>
-              ) : previewResult ? (
-                <div
-                  className="email-preview-content"
-                  dangerouslySetInnerHTML={{ __html: sanitizedPreview }}
-                />
-              ) : null}
-            </div>
-            {previewResult && !previewing && (
-              <div className="preview-stats">
-                <div className="preview-stat"><strong>Search tokens:</strong> {previewResult.tokenUsage.searchTokens.toLocaleString()}</div>
-                <div className="preview-stat"><strong>Analysis tokens:</strong> {previewResult.tokenUsage.analysisTokens.toLocaleString()}</div>
-                <div className="preview-stat"><strong>Total credits:</strong> {previewResult.tokenUsage.totalCredits}</div>
-              </div>
+            {expandedId === b.id && (
+              <div className="brief-content" onClick={(e) => e.stopPropagation()} dangerouslySetInnerHTML={{ __html: expandedHtml[b.id] ?? "<p>Loading...</p>" }} />
             )}
           </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+        ))}
+      </div>
     </div>
+  );
+}
+
+export default function Home() {
+  const token = useEmbedToken();
+  const [prefs, setPrefs] = useState<Prefs | null | "loading">("loading");
+  const { toast, show } = useToast();
+
+  useEffect(() => {
+    if (!token) return;
+    fetch("/api/preferences", { headers: ah(token) })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.setup_complete) {
+          setPrefs({ id: data.id, presets: data.presets ?? [], companies: data.companies ?? [], delivery_hour: data.delivery_hour ?? 8, schedule_days: data.schedule_days ?? [1,2,3,4,5], is_active: data.is_active ?? false, setup_complete: true });
+        } else { setPrefs(null); }
+      })
+      .catch(() => setPrefs(null));
+  }, [token]);
+
+  if (!token || prefs === "loading") return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh" }}><span className="spinner" /></div>
+  );
+
+  return (
+    <>
+      {prefs === null ? <SetupWizard token={token} onComplete={(p) => setPrefs(p)} show={show} /> : <Dashboard prefs={prefs} token={token} show={show} />}
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+    </>
   );
 }
