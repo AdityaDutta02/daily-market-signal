@@ -11,7 +11,7 @@ interface GatewayResponse {
 }
 
 export async function callGateway(
-  model: string,
+  routing: { category: string; tier: string },
   messages: GatewayMessage[],
   embedToken: string,
 ): Promise<GatewayResponse> {
@@ -23,7 +23,7 @@ export async function callGateway(
       Authorization: `Bearer ${embedToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ ...routing, messages }),
   });
 
   if (res.status === 401) {
@@ -43,7 +43,7 @@ export async function searchWeb(
   query: string,
   embedToken: string,
 ): Promise<GatewayResponse> {
-  return callGateway("openai/gpt-4o-search-preview", [
+  return callGateway({ category: "web_search", tier: "good" }, [
     { role: "system", content: "You are a financial data assistant specializing in Indian equity markets (NSE/BSE). Return accurate, current market data for Indian stocks. Include specific numbers, percentages, and prices in INR. Always cite your sources." },
     { role: "user", content: query },
   ], embedToken);
@@ -54,7 +54,7 @@ export async function analyzeWithDeepseek(
   userPrompt: string,
   embedToken: string,
 ): Promise<GatewayResponse> {
-  return callGateway("deepseek/deepseek-v3.2", [
+  return callGateway({ category: "chat", tier: "fast" }, [
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ], embedToken);
