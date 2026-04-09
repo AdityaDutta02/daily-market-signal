@@ -5,6 +5,7 @@ import {
   PresetType,
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
+import { sendEmail } from "@/lib/email-sdk";
 
 export async function POST(request: NextRequest) {
   const embedToken =
@@ -39,5 +40,12 @@ export async function POST(request: NextRequest) {
   });
   const html = wrapEmailHtml(sections, date);
 
-  return NextResponse.json({ html, date });
+  await sendEmail(
+    "user",
+    `Daily Market Signal - Preview - ${date}`,
+    html,
+    embedToken
+  );
+
+  return NextResponse.json({ html, date, sent: true });
 }
