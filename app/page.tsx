@@ -143,7 +143,12 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
     setSaving(true);
     try {
       const body = { presets, companies, delivery_hour: hour, schedule_days: days, is_active: true, setup_complete: true };
-      await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify(body) });
+      const prefRes = await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify(body) });
+      if (!prefRes.ok) {
+        const err = await prefRes.json().catch(() => ({ error: "Save failed" }));
+        show(err.error ?? "Failed to save preferences", "error");
+        return;
+      }
       await fetch("/api/schedule", { method: "POST", headers: ah(token), body: JSON.stringify({}) });
       if (sendPreview) {
         const previewRes = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets, companies }) });
