@@ -1,51 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbList, dbInsert, dbUpdate } from "@/lib/db";
+import { getUserId } from "@/lib/token";
 
 interface ItemRow {
   id: string;
   data: Record<string, unknown>;
-  created_at: string;
 }
+
+const VALID_PRESETS = new Set([
+  "nifty_movers", "stocks_to_watch", "sectoral_pulse",
+  "earnings_radar", "macro_dashboard",
+]);
 
 export async function GET(request: NextRequest) {
   const embedToken = request.headers.get("authorization")?.replace("Bearer ", "") ?? "";
   if (!embedToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  try {
-    const rows = await dbList<ItemRow>("items", {}, embedToken);
-    const pref = rows.find((r) => r.data.type === "preferences");
-    if (!pref) return NextResponse.json(null);
-    return NextResponse.json({ id: pref.id, ...pref.data });
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
-  }
+  const userId = getUserId(embedToken);
+  const rows = await dbList<ItemRow>("items", {}, embedToken);
+  const pref = rows.find(
+    (r) => r.data.type === "user_preferences" && r.data.user_id === userId
+  );
+  if (!pref) return NextResponse.json(null);
+  return NextResponse.json({ id: pref.id, ...pref.data });
 }
 
 export async function POST(request: NextRequest) {
   const embedToken = request.headers.get("authorization")?.replace("Bearer ", "") ?? "";
   if (!embedToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const userId = getUserId(embedToken);
   const body = await request.json();
+
+  const presets = (body.presets ?? []).filter((p: string) => VALID_PRESETS.has(p));
+  if (presets.length > 2) {
+    return NextResponse.json({ error: "Maximum 2 presets allowed" }, { status: 400 });
+  }
+  const companies = (body.companies ?? []).slice(0, 3).map((c: string) => c.trim().toUpperCase());
+  const deliveryHour = Math.min(10, Math.max(6, body.delivery_hour ?? 8));
+
   const data = {
-    type: "preferences",
-    tickers: body.tickers ?? [],
-    presets: body.presets ?? [],
+    type: "user_preferences",
+    user_id: userId,
+    presets,
+    companies,
+    delivery_hour: deliveryHour,
     schedule_days: body.schedule_days ?? [1, 2, 3, 4, 5],
-    schedule_time: body.schedule_time ?? "08:00",
-    timezone: body.timezone ?? "America/New_York",
     is_active: body.is_active ?? true,
+    setup_complete: body.setup_complete ?? true,
   };
 
-  try {
-    const rows = await dbList<ItemRow>("items", {}, embedToken);
-    const existing = rows.find((r) => r.data.type === "preferences");
-    if (existing) {
-      const updated = await dbUpdate("items", existing.id, { data }, embedToken);
-      return NextResponse.json(updated);
-    }
-    const created = await dbInsert("items", { data }, embedToken);
-    return NextResponse.json(created, { status: 201 });
-  } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  const rows = await dbList<ItemRow>("items", {}, embedToken);
+  const existing = rows.find(
+    (r) => r.data.type === "user_preferences" && r.data.user_id === userId
+  );
+  if (existing) {
+    const updated = await dbUpdate("items", existing.id, { data }, embedToken);
+    return NextResponse.json(updated);
   }
+  const created = await dbInsert("items", { data }, embedToken);
+  return NextResponse.json(created, { status: 201 });
 }
