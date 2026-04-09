@@ -24,28 +24,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const sections: string[] = [];
-  for (const preset of presets) {
-    sections.push(await generatePresetSection(preset, embedToken));
+  try {
+    const sections: string[] = [];
+    for (const preset of presets) {
+      sections.push(await generatePresetSection(preset, embedToken));
+    }
+    for (const company of companies) {
+      sections.push(await generateCompanySection(company, embedToken));
+    }
+
+    const date = new Date().toLocaleDateString("en-IN", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const html = wrapEmailHtml(sections, date);
+
+    await sendEmail(
+      "user",
+      `Daily Market Signal - Preview - ${date}`,
+      html,
+      embedToken
+    );
+
+    return NextResponse.json({ html, date, sent: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-  for (const company of companies) {
-    sections.push(await generateCompanySection(company, embedToken));
-  }
-
-  const date = new Date().toLocaleDateString("en-IN", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const html = wrapEmailHtml(sections, date);
-
-  await sendEmail(
-    "user",
-    `Daily Market Signal - Preview - ${date}`,
-    html,
-    embedToken
-  );
-
-  return NextResponse.json({ html, date, sent: true });
 }

@@ -146,8 +146,13 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
       await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify(body) });
       await fetch("/api/schedule", { method: "POST", headers: ah(token), body: JSON.stringify({}) });
       if (sendPreview) {
-        await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets, companies }) });
-        show("Preview sent to your email!");
+        const previewRes = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets, companies }) });
+        if (!previewRes.ok) {
+          const err = await previewRes.json().catch(() => ({ error: "Preview failed" }));
+          show(err.error ?? "Failed to send preview email", "error");
+        } else {
+          show("Preview sent to your email!");
+        }
       } else {
         show("Setup complete! Your brief is scheduled.");
       }
