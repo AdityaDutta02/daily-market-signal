@@ -12,7 +12,7 @@ export async function sendEmail(
       "Content-Type": "application/json",
       Authorization: `Bearer ${embedToken}`,
     },
-    body: JSON.stringify({ to, subject, html }),
+    body: JSON.stringify({ subject, html }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
