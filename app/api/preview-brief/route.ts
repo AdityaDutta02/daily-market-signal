@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
     const html = wrapEmailHtml(sections, date);
 
     await sendEmail(
-      "user",
       `Daily Market Signal - Preview - ${date}`,
       html,
       embedToken

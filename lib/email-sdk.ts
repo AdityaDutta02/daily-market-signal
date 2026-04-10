@@ -1,7 +1,8 @@
 const GATEWAY = process.env.TERMINAL_AI_GATEWAY_URL!;
 
+/** Send an email to the authenticated user. The gateway resolves the recipient
+ *  email from the embed token — apps never see the user's email address. */
 export async function sendEmail(
-  to: string,
   subject: string,
   html: string,
   embedToken: string,
@@ -12,7 +13,7 @@ export async function sendEmail(
       "Content-Type": "application/json",
       Authorization: `Bearer ${embedToken}`,
     },
-    body: JSON.stringify({ to, subject, html }),
+    body: JSON.stringify({ subject, html }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
