@@ -8,6 +8,7 @@ import {
   PresetType,
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
+import { fetchSheetData } from "@/lib/sheet-data";
 
 interface ItemRow {
   id: string;
@@ -55,13 +56,14 @@ export async function POST(request: NextRequest) {
     const companies = (user.data.companies as string[]) ?? [];
     const userId = user.data.user_id as string;
 
+    const sheetData = await fetchSheetData();
     const sections: string[] = [];
     for (const preset of presets) {
-      sections.push(await generatePresetSection(preset, embedToken));
+      sections.push(await generatePresetSection(preset, embedToken, sheetData));
     }
     for (const company of companies) {
       sections.push(
-        await generateCompanySection(company, embedToken)
+        await generateCompanySection(company, embedToken, sheetData)
       );
     }
 
