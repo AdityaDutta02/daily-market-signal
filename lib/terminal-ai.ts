@@ -36,7 +36,27 @@ export async function callGateway(
     const err = await res.text();
     throw new Error(`Gateway error ${res.status}: ${err}`);
   }
-  return res.json() as Promise<GatewayResponse>;
+  const json = await res.json();
+
+  // Gateway may return content directly or in choices array
+  if (json.choices?.[0]?.message?.content) {
+    return json as GatewayResponse;
+  }
+  // Normalize: if response has a different shape, wrap it
+  if (json.content) {
+    return { choices: [{ message: { content: json.content } }] };
+  }
+  if (json.result) {
+    return { choices: [{ message: { content: json.result } }] };
+  }
+  if (json.text) {
+    return { choices: [{ message: { content: json.text } }] };
+  }
+  if (json.message?.content) {
+    return { choices: [{ message: { content: json.message.content } }] };
+  }
+  // Last resort: stringify the whole response so we can debug
+  throw new Error(`Unexpected gateway response shape: ${JSON.stringify(json).substring(0, 500)}`);
 }
 
 export async function searchWeb(
