@@ -8,5 +8,17 @@
   "generates_artifacts": true,
   "model_tier": "standard",
   "category": "chat",
-  "tier": "good"
+  "tier": "good",
+  "env_vars": [
+    "TERMINAL_AI_GATEWAY_URL",
+    "TERMINAL_AI_APP_ID",
+    "GOOGLE_SHEET_ID",
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
+    "BRIGHTDATA_API_KEY",
+    "BRIGHTDATA_ZONE",
+    "SHEET_CSV_STOCK1",
+    "SHEET_CSV_STOCK2",
+    "SHEET_CSV_STOCK3",
+    "SHEET_CSV_INDICES"
+  ]
 }

@@ -2137,3 +2137,31 @@ export const NSE_TICKERS: string[] = [
   "ZYDUSLIFE",
   "ZYDUSWELL"
 ];
+
+// Return the full ticker list (embedToken reserved for future gateway-backed refresh)
+export async function getTickerList(_embedToken: string): Promise<string[]> {
+  return NSE_TICKERS;
+}
+
+// Search tickers by prefix or substring match (case-insensitive)
+export function searchTickers(query: string, symbols: string[]): string[] {
+  const q = query.toUpperCase();
+  return symbols.filter((t) => t.startsWith(q) || t.includes(q)).slice(0, 20);
+}
+
+// Validate that each ticker exists in the list; returns { valid, invalid }
+export async function validateTickers(
+  tickers: string[],
+  _embedToken: string,
+): Promise<{ valid: string[]; invalid: string[] }> {
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const ticker of tickers) {
+    if (NSE_TICKERS.includes(ticker.toUpperCase())) {
+      valid.push(ticker.toUpperCase());
+    } else {
+      invalid.push(ticker);
+    }
+  }
+  return { valid, invalid };
+}

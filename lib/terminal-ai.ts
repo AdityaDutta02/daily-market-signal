@@ -59,16 +59,6 @@ export async function callGateway(
   throw new Error(`Unexpected gateway response shape: ${JSON.stringify(json).substring(0, 500)}`);
 }
 
-export async function searchWeb(
-  query: string,
-  embedToken: string,
-): Promise<GatewayResponse> {
-  return callGateway({ category: "web_search", tier: "good" }, [
-    { role: "system", content: "You are a financial data assistant specializing in Indian equity markets (NSE/BSE). Return accurate, current market data for Indian stocks. Include specific numbers, percentages, and prices in INR. Always cite your sources." },
-    { role: "user", content: query },
-  ], embedToken);
-}
-
 export async function analyzeWithDeepseek(
   systemPrompt: string,
   userPrompt: string,
