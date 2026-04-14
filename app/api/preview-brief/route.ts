@@ -6,6 +6,7 @@ import {
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
 import { sendEmail } from "@/lib/email-sdk";
+import { fetchSheetData } from "@/lib/sheet-data";
 
 export async function POST(request: NextRequest) {
   const embedToken =
@@ -25,12 +26,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const sheetData = await fetchSheetData();
     const sections: string[] = [];
     for (const preset of presets) {
-      sections.push(await generatePresetSection(preset, embedToken));
+      sections.push(await generatePresetSection(preset, embedToken, sheetData));
     }
     for (const company of companies) {
-      sections.push(await generateCompanySection(company, embedToken));
+      sections.push(await generateCompanySection(company, embedToken, sheetData));
     }
 
     const date = new Date().toLocaleDateString("en-IN", {

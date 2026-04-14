@@ -6,6 +6,7 @@ import {
   generateCompanySection,
   PresetType,
 } from "@/lib/market-data";
+import { fetchSheetData } from "@/lib/sheet-data";
 
 interface ItemRow {
   id: string;
@@ -50,15 +51,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const sheetData = await fetchSheetData();
+
   const presetResults: string[] = [];
   for (const presetId of presetSet) {
-    await generatePresetSection(presetId, embedToken);
+    await generatePresetSection(presetId, embedToken, sheetData);
     presetResults.push(presetId);
   }
 
   const companyResults: string[] = [];
   for (const ticker of companySet) {
-    await generateCompanySection(ticker, embedToken);
+    await generateCompanySection(ticker, embedToken, sheetData);
     companyResults.push(ticker);
   }
 
