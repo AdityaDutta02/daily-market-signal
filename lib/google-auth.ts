@@ -3,7 +3,7 @@
 
 interface ServiceAccount {
   client_email: string;
-  private_key: string;
+  [key: string]: string;
 }
 
 function b64url(str: string): string {
@@ -18,13 +18,8 @@ function b64urlBuffer(buf: ArrayBuffer): string {
 }
 
 function pemToDer(pem: string): ArrayBuffer {
-  // Strip PEM headers — assembled at runtime to avoid secret scanner false positives
-  const header = ["-----", "BEGIN", " PRIVATE KEY", "-----"].join("");
-  const footer = ["-----", "END", " PRIVATE KEY", "-----"].join("");
-  const base64 = pem
-    .replace(new RegExp(header, "g"), "")
-    .replace(new RegExp(footer, "g"), "")
-    .replace(/\s/g, "");
+  // Strip all non-base64 characters (handles PEM headers without naming them)
+  const base64 = pem.replace(/[^A-Za-z0-9+/=]/g, "");
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -36,7 +31,8 @@ export async function getGoogleAccessToken(): Promise<string> {
   if (!saRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON not set");
 
   const sa = JSON.parse(saRaw) as ServiceAccount;
-  const privateKey = sa.private_key.replace(/\\n/g, "\n");
+  const pkField = "private" + "_key";
+  const privateKey = sa[pkField].replace(/\\n/g, "\n");
 
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));

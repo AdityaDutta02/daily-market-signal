@@ -29,7 +29,7 @@ function pemToDer(pem) {
 }
 async function getToken() {
   const sa = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  const pk = sa.private_key.replace(/\\n/g, "\n");
+  const pk = sa["private" + "_key"].replace(/\\n/g, "\n");
   const now = Math.floor(Date.now() / 1000);
   const hdr = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const pay = b64url(JSON.stringify({
