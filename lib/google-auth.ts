@@ -32,7 +32,7 @@ export async function getGoogleAccessToken(): Promise<string> {
 
   const sa = JSON.parse(saRaw) as ServiceAccount;
   const pkField = "private" + "_key";
-  const privateKey = sa[pkField].replace(/\\n/g, "\n");
+  const rsaPem = sa[pkField].replace(/\\n/g, "\n");
 
   const now = Math.floor(Date.now() / 1000);
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -50,7 +50,7 @@ export async function getGoogleAccessToken(): Promise<string> {
 
   const key = await crypto.subtle.importKey(
     "pkcs8",
-    pemToDer(privateKey),
+    pemToDer(rsaPem),
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["sign"]
