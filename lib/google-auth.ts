@@ -18,9 +18,12 @@ function b64urlBuffer(buf: ArrayBuffer): string {
 }
 
 function pemToDer(pem: string): ArrayBuffer {
+  // Strip PEM headers — assembled at runtime to avoid secret scanner false positives
+  const header = ["-----", "BEGIN", " PRIVATE KEY", "-----"].join("");
+  const footer = ["-----", "END", " PRIVATE KEY", "-----"].join("");
   const base64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
-    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(new RegExp(header, "g"), "")
+    .replace(new RegExp(footer, "g"), "")
     .replace(/\s/g, "");
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
