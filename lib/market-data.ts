@@ -208,9 +208,10 @@ async function buildMacroDashboardContext(sheetData: SheetData): Promise<string>
 export async function generatePresetSection(
   presetId: PresetType,
   embedToken: string,
-  sheetData: SheetData
+  sheetData: SheetData,
+  bust = false
 ): Promise<string> {
-  const cached = await getCachedPreset(presetId, embedToken);
+  const cached = await getCachedPreset(presetId, embedToken, bust);
   if (cached) return cached.html_section;
 
   let contextData: string;
@@ -240,9 +241,10 @@ export async function generatePresetSection(
 export async function generateCompanySection(
   ticker: string,
   embedToken: string,
-  sheetData: SheetData
+  sheetData: SheetData,
+  bust = false
 ): Promise<string> {
-  const cached = await getCachedCompany(ticker, embedToken);
+  const cached = await getCachedCompany(ticker, embedToken, bust);
   if (cached) return cached.html_section;
 
   const price = sheetData.stocks.get(ticker);

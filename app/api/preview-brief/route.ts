@@ -29,10 +29,10 @@ export async function POST(request: NextRequest) {
     const sheetData = await fetchSheetData();
     const sections: string[] = [];
     for (const preset of presets) {
-      sections.push(await generatePresetSection(preset, embedToken, sheetData));
+      sections.push(await generatePresetSection(preset, embedToken, sheetData, true));
     }
     for (const company of companies) {
-      sections.push(await generateCompanySection(company, embedToken, sheetData));
+      sections.push(await generateCompanySection(company, embedToken, sheetData, true));
     }
 
     const date = new Date().toLocaleDateString("en-IN", {

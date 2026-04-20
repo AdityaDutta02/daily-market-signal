@@ -8,8 +8,10 @@ interface ItemRow {
 
 export async function getCachedPreset(
   presetId: string,
-  embedToken: string
+  embedToken: string,
+  bust = false
 ): Promise<{ html_section: string; search_data: string } | null> {
+  if (bust) return null;
   const today = getTodayISO();
   const rows = await dbList<ItemRow>("items", {}, embedToken);
   const hit = rows.find(
@@ -52,8 +54,10 @@ export async function setCachedPreset(
 
 export async function getCachedCompany(
   ticker: string,
-  embedToken: string
+  embedToken: string,
+  bust = false
 ): Promise<{ html_section: string; search_data: string } | null> {
+  if (bust) return null;
   const today = getTodayISO();
   const rows = await dbList<ItemRow>("items", {}, embedToken);
   const hit = rows.find(
