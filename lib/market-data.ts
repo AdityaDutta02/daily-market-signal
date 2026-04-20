@@ -49,12 +49,53 @@ const NIFTY50_SYMBOLS: string[] = [
   "TECHM","TITAN","TRENT","ULTRACEMCO","WIPRO",
 ];
 
-const SECTION_FORMAT_PROMPT = `You are an expert financial analyst writing a section of a morning Indian market brief email.
-Format the data into clean HTML suitable for email clients.
-Use inline styles only. Font: system-ui, -apple-system, sans-serif.
-Colors: #1A1A1A for text, #5B5BD6 for accents, #2E7D32 for positive, #C62828 for negative.
-Use tables with borders for data, bullet points for insights.
-Keep it concise and scannable. Return ONLY the HTML section content, no wrapping body/html tags.`;
+const HTML_BASE = `You are a senior Indian equity analyst writing a morning market brief email.
+Use inline styles only. Font: system-ui,-apple-system,sans-serif.
+Colors: #1A1A1A text, #5B5BD6 accents, #2E7D32 positive, #C62828 negative.
+Compact tables for data (border-collapse:collapse, 1px solid #E8E5E0 borders, 8px cell padding).
+Return ONLY the HTML section content — no body, html, or head tags.`;
+
+const SECTION_PROMPTS: Record<PresetType, string> = {
+  nifty_movers: `${HTML_BASE}
+
+Write a "Nifty/Sensex Movers" section a fund manager would find useful:
+1. Index levels table (omit any index where data is unavailable)
+2. Top 5 Gainers and Top 5 Losers tables side by side or stacked
+3. "Market Pulse" paragraph (2–3 sentences): name the sector theme driving today's moves, explain any unusual single-stock moves using the news context provided, give one specific actionable observation.
+Be concrete — name sectors, stocks, and catalysts. No generic filler.`,
+
+  stocks_to_watch: `${HTML_BASE}
+
+Write a "Stocks to Watch" section for active traders:
+1. Table of top movers by % change
+2. Highlight 3–5 specific stocks worth watching with a one-line reason each (catalyst, breakout, volume spike, earnings proximity)
+3. One sentence on overall breadth and momentum tone.
+Be opinionated — traders need signals, not observations.`,
+
+  sectoral_pulse: `${HTML_BASE}
+
+Write a "Sectoral Pulse" section showing money rotation:
+1. Sector indices table color-coded by performance (green positive, red negative)
+2. "Rotation Theme" paragraph: which 2–3 sectors are leading, which lagging, and the macro or fundamental story behind it
+3. One sector to watch tomorrow.
+Be specific about what the rotation signals for the next session.`,
+
+  earnings_radar: `${HTML_BASE}
+
+Write an "Earnings Radar" section for the week ahead:
+1. Upcoming results as a table (Company | Date | Street Expectation | Surprise Risk)
+2. Flag results with highest beat/miss potential with a one-line reason
+3. One sentence on the overall earnings season tone.
+If data is sparse, note what major companies are reporting and what consensus expects.`,
+
+  macro_dashboard: `${HTML_BASE}
+
+Write a "Macro Dashboard" section covering Indian market drivers:
+1. Table with rows for: INR/USD, Brent Crude, MCX Gold, US 10Y yield — extract exact figures where available, mark "N/A" where not
+2. FII/DII flows row: net buyer or seller, quantum if available
+3. "Macro Read" paragraph (2–3 sentences): how today's macro backdrop is a headwind or tailwind for Indian equities, and one specific implication for sector rotation.
+Do not omit rows — show N/A rather than hiding missing data.`,
+};
 
 function fmt(close: number, changePct: number): string {
   const sign = changePct >= 0 ? "+" : "";
@@ -73,9 +114,9 @@ async function buildNiftyMoversContext(sheetData: SheetData): Promise<string> {
   const gainers = entries.slice(0, 5);
   const losers = [...entries].sort((a, b) => a.changePct - b.changePct).slice(0, 5);
 
-  const nifty = sheetData.indices.get("Nifty 50");
-  const sensex = sheetData.indices.get("Sensex");
-  const bnifty = sheetData.indices.get("Bank Nifty");
+  const nifty   = sheetData.indices.get("Nifty 50");
+  const sensex  = sheetData.indices.get("Sensex");
+  const bnifty  = sheetData.indices.get("Bank Nifty");
 
   const lines: string[] = [
     "=== INDEX LEVELS ===",
@@ -89,6 +130,16 @@ async function buildNiftyMoversContext(sheetData: SheetData): Promise<string> {
     "=== NIFTY 50 TOP 5 LOSERS ===",
     ...losers.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`),
   ];
+
+  // Fetch news for top movers to give AI catalyst context
+  const topSymbols = [...gainers, ...losers].map((e) => e.symbol);
+  try {
+    const news = await getStocksNews(topSymbols);
+    lines.push("", "=== NEWS & CATALYSTS FOR TOP MOVERS ===", news);
+  } catch {
+    // no news available — AI will work from price data alone
+  }
+
   return lines.join("\n");
 }
 
@@ -136,11 +187,21 @@ async function buildEarningsRadarContext(): Promise<string> {
   }
 }
 
-async function buildMacroDashboardContext(): Promise<string> {
+async function buildMacroDashboardContext(sheetData: SheetData): Promise<string> {
+  // Build sector proxy fallback from sheet data (Energy/Metal signal commodity sentiment)
+  const energy = sheetData.indices.get("Nifty Energy");
+  const metal  = sheetData.indices.get("Nifty Metal");
+  const sectorProxy = [
+    "=== SECTOR PROXIES (commodity sentiment) ===",
+    energy ? `Nifty Energy: ${fmt(energy.close, energy.changePct)}` : "Nifty Energy: data unavailable",
+    metal  ? `Nifty Metal:  ${fmt(metal.close,  metal.changePct)}`  : "Nifty Metal:  data unavailable",
+  ].join("\n");
+
   try {
-    return "=== MACRO INDICATORS ===\n" + (await getMacroData());
+    const serpData = await getMacroData();
+    return "=== MACRO INDICATORS ===\n" + serpData + "\n\n" + sectorProxy;
   } catch {
-    return "=== MACRO INDICATORS ===\n(Macro data unavailable)";
+    return "=== MACRO INDICATORS ===\n(Live FX/commodity data unavailable)\n\n" + sectorProxy;
   }
 }
 
@@ -158,14 +219,16 @@ export async function generatePresetSection(
     case "stocks_to_watch": contextData = await buildStocksToWatchContext(sheetData); break;
     case "sectoral_pulse":  contextData = await buildSectoralPulseContext(sheetData); break;
     case "earnings_radar":  contextData = await buildEarningsRadarContext(); break;
-    case "macro_dashboard": contextData = await buildMacroDashboardContext(); break;
+    case "macro_dashboard": contextData = await buildMacroDashboardContext(sheetData); break;
     default:                contextData = `No data available for preset: ${presetId}`;
   }
 
   const label = PRESETS.find((p) => p.id === presetId)?.name ?? presetId;
+  const systemPrompt = SECTION_PROMPTS[presetId as PresetType] ?? SECTION_PROMPTS.nifty_movers;
+
   const result = await analyzeWithDeepseek(
-    SECTION_FORMAT_PROMPT,
-    `Format this "${label}" data into an HTML section with a heading:\n\n${contextData}`,
+    systemPrompt,
+    `Here is the raw market data for the "${label}" section:\n\n${contextData}`,
     embedToken
   );
   const htmlSection = result.choices[0].message.content;
@@ -195,9 +258,17 @@ export async function generateCompanySection(
   }
 
   const contextData = priceCtx + newsCtx;
+  const systemPrompt = `${HTML_BASE}
+
+Write a compact stock brief for ${ticker}:
+1. Price row with % change color-coded
+2. 2–3 bullet points on recent news or catalysts
+3. One-line analyst take: bullish, bearish, or neutral, and why.
+Be specific and opinionated — not a news summary.`;
+
   const result = await analyzeWithDeepseek(
-    SECTION_FORMAT_PROMPT,
-    `Format this data for "${ticker}" into a compact HTML section:\n\n${contextData}`,
+    systemPrompt,
+    `Here is the data for ${ticker}:\n\n${contextData}`,
     embedToken
   );
   const htmlSection = result.choices[0].message.content;
