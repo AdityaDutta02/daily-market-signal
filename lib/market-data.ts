@@ -1,5 +1,5 @@
 // lib/market-data.ts
-import { analyzeWithDeepseek } from "./terminal-ai";
+import { analyzeWithGemini as analyze } from "./terminal-ai";
 import {
   getCachedPreset,
   setCachedPreset,
@@ -105,7 +105,10 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
     bnifty ? `<tr><td ${TD}>Bank Nifty</td><td ${TD}>${fmtClose(bnifty.close)}</td><td ${bnifty.changePct >= 0 ? POS : NEG}>${fmtPct(bnifty.changePct)}</td></tr>` : "",
   ].filter(Boolean).join("");
 
-  const indexTable = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Index</th><th ${TH}>Level</th><th ${TH}>Change</th></tr></thead><tbody>${indexRows}</tbody></table>`;
+  const noDataNote = `<p style="font-size:12px;color:#6B7280;margin:0 0 16px;font-style:italic;">Markets open at 9:15 AM IST — data reflects previous session close.</p>`;
+  const indexTable = indexRows
+    ? `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Index</th><th ${TH}>Level</th><th ${TH}>Change</th></tr></thead><tbody>${indexRows}</tbody></table>`
+    : noDataNote;
 
   // Gainers table
   const gainerRows = gainers.map((e, i) => {
@@ -119,7 +122,7 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
     return `<tr><td ${alt ? TD_ALT : TD}>${e.symbol}</td><td ${alt ? TD_ALT : TD}>${fmtClose(e.close)}</td><td ${alt ? NEG_ALT : NEG}>${fmtPct(e.changePct)}</td></tr>`;
   }).join("");
 
-  const moverTables = `<table ${TABLE_STYLE} style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
+  const moverTables = gainers.length === 0 ? "" : `<table ${TABLE_STYLE} style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
   <thead><tr>
     <th ${TH} colspan="3">Top 5 Gainers</th>
     <th ${TH} style="background:#0A1628;color:#C9A84C;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:10px 12px;text-align:left;border-left:4px solid #EDEEF0;" colspan="3">Top 5 Losers</th>
@@ -140,29 +143,27 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
   </tbody>
 </table>`;
 
-  // Market Pulse — AI generates insight text only
+  // Market Pulse — skip AI call when there is no live mover data
+  if (gainers.length === 0) {
+    return indexTable + insightBox("MARKET PULSE", "Live session data unavailable — market pulse will generate once NSE opens at 9:15 AM IST.");
+  }
+
   const topSymbols = [...gainers, ...losers].map((e) => e.symbol);
   let newsCtx = "";
   try { newsCtx = await getStocksNews(topSymbols); } catch { /* no news */ }
 
-  const dataCtx = [
-    gainers.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join(", "),
-    losers.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join(", "),
-    newsCtx ? `\nNews context:\n${newsCtx}` : "",
-  ].join("\n");
-
-  const pulse = await analyzeWithDeepseek(
+  const pulse = await analyze(
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write a 2–3 sentence "Market Pulse" in the style of a Goldman Sachs morning note.
 
 Rules:
 - Name the sector theme with precise language (e.g. "defensive rotation into staples", "earnings-driven re-rating in utilities")
 - If news context is provided, reference it to explain specific moves — do not invent facts absent from the data
-- End with one actionable, directional observation with a clear rationale (e.g. "Tactically add HINDUNILVR on dips — the staples bid should hold through month-end as institutional flows chase defensives ahead of the RBI policy meeting")
-- Be specific, opinionated, and concise. No hedge words ("may", "could", "might"). No filler phrases ("it is worth noting", "investors should be aware")
-- Plain text only — no HTML, no bullet points
+- End with one actionable, directional observation with a clear rationale
+- Be specific, opinionated, and concise. No hedge words ("may", "could", "might"). No filler phrases
+- Output ONLY the insight text — no HTML, no bullet points, no preamble
 
-Example output style:
-"FMCG outperformance — HINDUNILVR +4.7%, BRITANNIA +2.7% — reflects a clear defensive rotation as IT (WIPRO -3.7%, HDFCLIFE -3.4%) extends its de-rating on muted FY26 guidance. The breadth of staples gains across price points suggests institutional accumulation, not just retail momentum. Tactically overweight HINDUNILVR and NESTLEIND through next week; trim WIPRO into any bounce above ₹210."`,
+Example style (use synthetic names below as style reference ONLY — never use these names in output):
+"ALPHACORP +4.7%, BETAFMCG +2.7% — defensive rotation into staples as GAMMAIT -3.7% extends de-rating on muted guidance. Institutional accumulation breadth across price points confirms the rotation is durable, not retail-led. Tactically overweight ALPHACORP through month-end; trim GAMMAIT into any bounce."`,
     `Gainers: ${gainers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\nLosers: ${losers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
@@ -190,7 +191,7 @@ async function buildStocksToWatchHtml(sheetData: SheetData, embedToken: string):
   let volumeCtx = "";
   try { volumeCtx = await getVolumeLeaders(); } catch { /* skip */ }
 
-  const signals = await analyzeWithDeepseek(
+  const signals = await analyze(
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write 3–5 bullet points for a "Signals" watchlist in the style of a Morgan Stanley daily note.
 
 Rules:
@@ -200,10 +201,10 @@ Rules:
 - No filler. No invented facts. Use only what's in the data.
 - Use • as bullet character. Plain text only — no HTML.
 
-Example output style:
-• HINDUNILVR (+4.72%) — earnings-led breakout above ₹2,200 resistance; next target ₹2,350. Add on any intraday pullback to ₹2,210.
-• WIPRO (-3.70%) — volume 2.3x average on guidance miss; avoid until ₹195 support is tested. Risk-reward skewed negative through results season.
-• POWERGRID (+2.39%) — steady utility bid, likely FII-driven ahead of RBI; hold existing positions, not a chase.`,
+Example style (synthetic names for style reference ONLY — never use these names in output):
+• ALPHACORP (+4.72%) — earnings-led breakout above ₹2,200 resistance; next target ₹2,350. Add on any intraday pullback to ₹2,210.
+• GAMMATECH (-3.70%) — volume 2.3x average on guidance miss; avoid until ₹195 support is tested. Risk-reward skewed negative through results season.
+• DELTAUTILITY (+2.39%) — steady FII-driven bid ahead of RBI; hold existing positions, not a chase.`,
     `Top movers:\n${top10.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n")}\n${volumeCtx ? "\nVolume leaders:\n" + volumeCtx : ""}`,
     embedToken
   );
@@ -233,7 +234,7 @@ async function buildSectoralPulseHtml(sheetData: SheetData, embedToken: string):
 
   const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Sector</th><th ${TH}>Level</th><th ${TH}>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
 
-  const rotation = await analyzeWithDeepseek(
+  const rotation = await analyze(
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write 2–3 sentences on sector rotation in the style of a BlackRock Investment Institute daily note.
 
 Rules:
@@ -257,7 +258,7 @@ async function buildEarningsRadarHtml(embedToken: string): Promise<string> {
   let rawData = "";
   try { rawData = await getEarningsCalendar(); } catch { /* skip */ }
 
-  const result = await analyzeWithDeepseek(
+  const result = await analyze(
     `You are a senior Indian equity analyst. Using the earnings data provided (or your knowledge of the current Q4 FY2026 earnings season if data is sparse), write:
 1. A plain-text table of upcoming results in this exact format, one per line:
    COMPANY | DATE | EXPECTATION | SURPRISE_RISK
@@ -349,7 +350,7 @@ async function buildMacroDashboardHtml(sheetData: SheetData, embedToken: string)
     fmcg   ? `Nifty FMCG: ${fmt(fmcg.close, fmcg.changePct)}`     : "",
   ].filter(Boolean).join("\n");
 
-  const macroRead = await analyzeWithDeepseek(
+  const macroRead = await analyze(
     `You are a senior macro strategist at a top-tier institutional firm. Write 2–3 sentences for a "MACRO READ" insight box in the style of a JPMorgan Global Markets daily note.
 
 Rules:
@@ -408,7 +409,7 @@ export async function generateCompanySection(
   let newsCtx = "";
   try { newsCtx = await getStocksNews([ticker]); } catch { /* skip */ }
 
-  const analysis = await analyzeWithDeepseek(
+  const analysis = await analyze(
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write a stock note in the style of a Jefferies equity research flash note.
 
 Format (plain text, • for bullets, no HTML):
@@ -423,8 +424,8 @@ Rules:
 - Do not invent news not in the data
 - Be directional and specific — no hedging language
 
-Example output:
-HINDUNILVR +4.72% to ₹2,240 on Q4 PAT beat of ~8% vs consensus, driven by rural volume recovery.
+Example style (synthetic names for style reference ONLY — never use these names in output):
+ALPHACORP +4.72% to ₹2,240 on Q4 PAT beat of ~8% vs consensus, driven by rural volume recovery.
 • Q4 volume growth of 4% YoY marks first positive quarter in six, signalling the rural demand inflection thesis is materialising
 • Stock broke above ₹2,200 resistance on 1.8x average volume — next technical target ₹2,350
 • Risk: commodity cost inflation (palm oil +12% QTD) could pressure margins in Q1 FY27

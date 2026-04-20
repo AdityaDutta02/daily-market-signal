@@ -70,6 +70,25 @@ export async function analyzeWithDeepseek(
   ], embedToken);
 }
 
+export async function analyzeWithGemini(
+  systemPrompt: string,
+  userPrompt: string,
+  embedToken: string,
+): Promise<GatewayResponse> {
+  // Try Gemini Flash for reasoning-heavy insight generation; fall back to Deepseek on error
+  try {
+    return await callGateway({ category: "reasoning", tier: "standard" }, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], embedToken);
+  } catch {
+    return callGateway({ category: "chat", tier: "fast" }, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], embedToken);
+  }
+}
+
 export async function searchWeb(
   query: string,
   embedToken: string,
