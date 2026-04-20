@@ -73,8 +73,8 @@ const SHEET_URLS = {
 export async function fetchSheetData(): Promise<SheetData> {
   const [csv1, csv2, csv3, csvIdx] = await Promise.all([
     fetchCsv(SHEET_URLS.stock1, "Stock_1"),
-    fetchCsv(urls.GSHEET_STOCK_2_URL!, "Stock_2"),
-    fetchCsv(urls.GSHEET_STOCK_3_URL!, "Stock_3"),
+    fetchCsv(SHEET_URLS.stock2, "Stock_2"),
+    fetchCsv(SHEET_URLS.stock3, "Stock_3"),
     fetchCsv(SHEET_URLS.indices, "Indices"),
   ]);
 
