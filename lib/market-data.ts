@@ -49,52 +49,59 @@ const NIFTY50_SYMBOLS: string[] = [
   "TECHM","TITAN","TRENT","ULTRACEMCO","WIPRO",
 ];
 
-const HTML_BASE = `You are a senior Indian equity analyst writing a morning market brief email.
-Use inline styles only. Font: system-ui,-apple-system,sans-serif.
-Colors: #1A1A1A text, #5B5BD6 accents, #2E7D32 positive, #C62828 negative.
-Compact tables for data (border-collapse:collapse, 1px solid #E8E5E0 borders, 8px cell padding).
-Return ONLY the HTML section content — no body, html, or head tags.`;
+const HTML_BASE = `You are a senior Indian equity analyst writing a premium institutional morning brief.
+Style guide (inline styles only — no external CSS, no classes):
+- Font: 'Helvetica Neue',Helvetica,Arial,sans-serif
+- Section heading: font-size:13px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; color:#0A1628; border-bottom:2px solid #C9A84C; padding-bottom:8px; margin:0 0 18px;
+- Table: width:100%; border-collapse:collapse; font-size:13px; margin-bottom:4px;
+- Table header row: background:#0A1628; color:#C9A84C; font-size:11px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; padding:10px 12px;
+- Table data row: padding:10px 12px; border-bottom:1px solid #EEF0F3; color:#1A2332;
+- Alternating row: background:#F8F9FB for even rows
+- Positive value: color:#00875A; font-weight:600;
+- Negative value: color:#DE350B; font-weight:600;
+- Insight box: background:#F0F4FF; border-left:3px solid #0A1628; padding:14px 16px; margin-top:18px; font-size:13px; line-height:1.7; color:#1A2332;
+- Insight label: font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#C9A84C; margin-bottom:6px;
+Return ONLY the HTML section content — no body, html, head, or style tags.`;
 
 const SECTION_PROMPTS: Record<PresetType, string> = {
   nifty_movers: `${HTML_BASE}
 
-Write a "Nifty/Sensex Movers" section a fund manager would find useful:
-1. Index levels table (omit any index where data is unavailable)
-2. Top 5 Gainers and Top 5 Losers tables side by side or stacked
-3. "Market Pulse" paragraph (2–3 sentences): name the sector theme driving today's moves, explain any unusual single-stock moves using the news context provided, give one specific actionable observation.
-Be concrete — name sectors, stocks, and catalysts. No generic filler.`,
+Write a "Nifty / Sensex Movers" section in the style of a Goldman Sachs morning note:
+1. Index levels table with 3 columns: Index | Level | Change %. Omit any index row where data is "data unavailable".
+2. Two tables side by side (or stacked if space): Top 5 Gainers and Top 5 Losers. Columns: Stock | Price | Change %. Color-code change column.
+3. An insight box labelled "MARKET PULSE": 2–3 sentences naming the sector theme, the key catalyst from news context (if news is provided), and one specific actionable observation for tomorrow.
+Be concrete — name sectors, catalysts, and stocks. No generic filler. No hallucinated facts.`,
 
   stocks_to_watch: `${HTML_BASE}
 
-Write a "Stocks to Watch" section for active traders:
-1. Table of top movers by % change
-2. Highlight 3–5 specific stocks worth watching with a one-line reason each (catalyst, breakout, volume spike, earnings proximity)
-3. One sentence on overall breadth and momentum tone.
-Be opinionated — traders need signals, not observations.`,
+Write a "Stocks to Watch" section for active institutional traders:
+1. Table of top 10 movers: Stock | Price | Change %. Color-code change.
+2. An insight box labelled "SIGNALS": 3–5 bullet points, each naming a specific stock and a one-line reason (catalyst, breakout level, volume anomaly, upcoming event).
+3. One sentence at the bottom on overall breadth and momentum tone.
+Be opinionated and specific — name stocks, not themes.`,
 
   sectoral_pulse: `${HTML_BASE}
 
-Write a "Sectoral Pulse" section showing money rotation:
-1. Sector indices table color-coded by performance (green positive, red negative)
-2. "Rotation Theme" paragraph: which 2–3 sectors are leading, which lagging, and the macro or fundamental story behind it
-3. One sector to watch tomorrow.
-Be specific about what the rotation signals for the next session.`,
+Write a "Sectoral Pulse" section showing institutional rotation:
+1. Full sector table: Sector | Level | Change %. Sort by change descending. Color-code change column. Include all sectors — even those flat or unavailable.
+2. An insight box labelled "ROTATION THEME": which 2–3 sectors are leading, which are lagging, the macro or fundamental story explaining the rotation, and one sector to position in for the next session.
+Be specific about what the data signals, not just what the data shows.`,
 
   earnings_radar: `${HTML_BASE}
 
-Write an "Earnings Radar" section for the week ahead:
-1. Upcoming results as a table (Company | Date | Street Expectation | Surprise Risk)
-2. Flag results with highest beat/miss potential with a one-line reason
-3. One sentence on the overall earnings season tone.
-If data is sparse, note what major companies are reporting and what consensus expects.`,
+Write an "Earnings Radar" section for active investors:
+1. Table: Company | Reporting Period | Street Expectation | Surprise Risk (High/Medium/Low). Use any earnings data provided.
+2. An insight box labelled "EARNINGS WATCH": flag the 1–2 results with highest surprise potential and explain why in one line each.
+3. One sentence on overall earnings season tone.
+If specific earnings data is sparse or unavailable, write a brief note on what major sectors are expected to report this week based on the quarter, and flag which are historically prone to surprises.`,
 
   macro_dashboard: `${HTML_BASE}
 
-Write a "Macro Dashboard" section covering Indian market drivers:
-1. Table with rows for: INR/USD, Brent Crude, MCX Gold, US 10Y yield — extract exact figures where available, mark "N/A" where not
-2. FII/DII flows row: net buyer or seller, quantum if available
-3. "Macro Read" paragraph (2–3 sentences): how today's macro backdrop is a headwind or tailwind for Indian equities, and one specific implication for sector rotation.
-Do not omit rows — show N/A rather than hiding missing data.`,
+Write a "Macro Dashboard" section using ONLY the data provided — do not hallucinate figures:
+1. Build a table using only indicators where a real value is given in the data. Skip any indicator that says "unavailable" or has no number — do NOT show N/A rows.
+2. Use the sector proxies provided (Nifty Energy, Nifty Metal) as commodity sentiment indicators in the table with a "Proxy" label in the source column.
+3. An insight box labelled "MACRO READ": interpret what the available data signals for Indian equities — FII/DII flow direction, commodity tailwinds/headwinds from sector proxies, and FX impact if data is available. Be specific about which sectors benefit or suffer.
+Never invent numbers. If truly no data is available, the insight box should acknowledge the data gap and note what to watch for.`,
 };
 
 function fmt(close: number, changePct: number): string {
