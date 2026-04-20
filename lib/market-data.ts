@@ -1,5 +1,5 @@
 // lib/market-data.ts
-import { analyzeWithDeepseek, searchWeb } from "./terminal-ai";
+import { analyzeWithDeepseek } from "./terminal-ai";
 import {
   getCachedPreset,
   setCachedPreset,
@@ -11,6 +11,7 @@ import {
   getVolumeLeaders,
   getEarningsCalendar,
 } from "./brightdata";
+import { fetchMacroIndicators } from "./macro-fetch";
 import type { SheetData } from "./sheet-data";
 
 export type PresetType =
@@ -151,10 +152,18 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
   ].join("\n");
 
   const pulse = await analyzeWithDeepseek(
-    `You are a senior Indian equity analyst. Write 2–3 sentences for a "Market Pulse" insight box.
-Name the sector theme driving today's Nifty movers. If news context is provided, use it to explain specific moves — do not invent facts not in the data.
-Give one specific actionable observation. Plain text only — no HTML tags, no bullet points.`,
-    `Gainers: ${gainers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\nLosers: ${losers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\n${newsCtx ? "News:\n" + newsCtx : "(No news data available)"}`,
+    `You are a senior Indian equity analyst at a top-tier institutional firm. Write a 2–3 sentence "Market Pulse" in the style of a Goldman Sachs morning note.
+
+Rules:
+- Name the sector theme with precise language (e.g. "defensive rotation into staples", "earnings-driven re-rating in utilities")
+- If news context is provided, reference it to explain specific moves — do not invent facts absent from the data
+- End with one actionable, directional observation with a clear rationale (e.g. "Tactically add HINDUNILVR on dips — the staples bid should hold through month-end as institutional flows chase defensives ahead of the RBI policy meeting")
+- Be specific, opinionated, and concise. No hedge words ("may", "could", "might"). No filler phrases ("it is worth noting", "investors should be aware")
+- Plain text only — no HTML, no bullet points
+
+Example output style:
+"FMCG outperformance — HINDUNILVR +4.7%, BRITANNIA +2.7% — reflects a clear defensive rotation as IT (WIPRO -3.7%, HDFCLIFE -3.4%) extends its de-rating on muted FY26 guidance. The breadth of staples gains across price points suggests institutional accumulation, not just retail momentum. Tactically overweight HINDUNILVR and NESTLEIND through next week; trim WIPRO into any bounce above ₹210."`,
+    `Gainers: ${gainers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\nLosers: ${losers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
 
@@ -182,10 +191,20 @@ async function buildStocksToWatchHtml(sheetData: SheetData, embedToken: string):
   try { volumeCtx = await getVolumeLeaders(); } catch { /* skip */ }
 
   const signals = await analyzeWithDeepseek(
-    `You are a senior Indian equity analyst. Write 3–5 bullet points for a "Signals" insight box.
-Each bullet: name one specific stock and give a one-line reason why it's worth watching (catalyst, breakout, volume, upcoming event).
-Plain text bullets only — use • as bullet character. No HTML tags.`,
-    `Top movers:\n${top10.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n")}\n${volumeCtx ? "\nVolume data:\n" + volumeCtx : ""}`,
+    `You are a senior Indian equity analyst at a top-tier institutional firm. Write 3–5 bullet points for a "Signals" watchlist in the style of a Morgan Stanley daily note.
+
+Rules:
+- Each bullet: stock ticker, current move, and a one-line thesis (catalyst, key level, volume anomaly, upcoming event, or risk/reward setup)
+- Be directional — say "buy", "avoid", "watch for", "trim" — not just "interesting"
+- Include price levels where relevant (e.g. "support at ₹195", "resistance at ₹310")
+- No filler. No invented facts. Use only what's in the data.
+- Use • as bullet character. Plain text only — no HTML.
+
+Example output style:
+• HINDUNILVR (+4.72%) — earnings-led breakout above ₹2,200 resistance; next target ₹2,350. Add on any intraday pullback to ₹2,210.
+• WIPRO (-3.70%) — volume 2.3x average on guidance miss; avoid until ₹195 support is tested. Risk-reward skewed negative through results season.
+• POWERGRID (+2.39%) — steady utility bid, likely FII-driven ahead of RBI; hold existing positions, not a chase.`,
+    `Top movers:\n${top10.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n")}\n${volumeCtx ? "\nVolume leaders:\n" + volumeCtx : ""}`,
     embedToken
   );
 
@@ -215,9 +234,16 @@ async function buildSectoralPulseHtml(sheetData: SheetData, embedToken: string):
   const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Sector</th><th ${TH}>Level</th><th ${TH}>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
 
   const rotation = await analyzeWithDeepseek(
-    `You are a senior Indian equity analyst. Write 2–3 sentences for a "Rotation Theme" insight box.
-Name the 2 leading and 1–2 lagging sectors. Explain the macro or fundamental story driving the rotation.
-End with one specific sector to position in for the next session and why. Plain text only — no HTML.`,
+    `You are a senior Indian equity analyst at a top-tier institutional firm. Write 2–3 sentences on sector rotation in the style of a BlackRock Investment Institute daily note.
+
+Rules:
+- Name the 1–2 leading sectors and 1–2 lagging sectors with their exact % moves
+- Explain the macro or fundamental story driving the rotation (risk-on/off, rate sensitivity, earnings cycle, FII flows, commodity linkage)
+- End with one specific sector to position in for the next session with a clear rationale and risk
+- Be precise and opinionated. No hedging language. Plain text only — no HTML.
+
+Example output style:
+"Energy (+2.62%) and FMCG (+2.43%) lead today's advance, consistent with a defensive/commodity tilt as IT (-0.73%) and Pharma (-0.04%) underperform — the latter two are underweight in current FII positioning ahead of US Q1 earnings risk. The rotation out of growth into value/defensives mirrors last Thursday's pattern before the RBI policy surprise. Position in Nifty Energy for tomorrow; upstream oil names (ONGC, OIL) offer the best risk-reward if Brent holds above $82."`,
     available.map((e) => `${e.name}: ${fmtPct(e.changePct)}`).join("\n"),
     embedToken
   );
@@ -272,36 +298,69 @@ For the table, use plain text only.`,
 // ── Macro Dashboard ───────────────────────────────────────────────────────────
 
 async function buildMacroDashboardHtml(sheetData: SheetData, embedToken: string): Promise<string> {
-  // Sector proxies from sheet (always available)
+  // Fetch live FX/commodity data and sector proxies in parallel
   const energy = sheetData.indices.get("Nifty Energy");
   const metal  = sheetData.indices.get("Nifty Metal");
   const fmcg   = sheetData.indices.get("Nifty FMCG");
 
-  // Try gateway web search for live macro data
-  let searchData = "";
-  try {
-    const res = await searchWeb(
-      "Current INR USD exchange rate, Brent crude oil price today, MCX gold price today India, FII DII net flows NSE today April 2026. Give exact numbers.",
-      embedToken
-    );
-    searchData = res.choices[0].message.content;
-  } catch { /* fall through to sector proxies */ }
+  const liveIndicators = await fetchMacroIndicators();
 
-  // Build table rows from sector data we always have
-  const sectorRows = [
-    energy ? `<tr><td ${TD}>Nifty Energy (proxy)</td><td ${energy.changePct >= 0 ? POS : NEG}>${fmtClose(energy.close)} ${fmtPct(energy.changePct)}</td></tr>` : "",
-    metal  ? `<tr><td ${TD_ALT}>Nifty Metal (proxy)</td><td ${metal.changePct >= 0 ? POS_ALT : NEG_ALT}>${fmtClose(metal.close)} ${fmtPct(metal.changePct)}</td></tr>` : "",
-    fmcg   ? `<tr><td ${TD}>Nifty FMCG (proxy)</td><td ${fmcg.changePct >= 0 ? POS : NEG}>${fmtClose(fmcg.close)} ${fmtPct(fmcg.changePct)}</td></tr>` : "",
-  ].filter(Boolean).join("");
+  // Build table: live indicators first, then sector proxies
+  const liveRows = liveIndicators.map((ind, i) => {
+    const alt = i % 2 === 0;
+    const changeColor = ind.changePct >= 0
+      ? (alt ? POS : POS_ALT)
+      : (alt ? NEG : NEG_ALT);
+    return `<tr>
+      <td ${alt ? TD : TD_ALT}>${ind.label}</td>
+      <td ${alt ? TD : TD_ALT}>${ind.value}</td>
+      <td ${changeColor}>${ind.change}</td>
+    </tr>`;
+  }).join("");
 
-  const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Indicator</th><th ${TH}>Value</th></tr></thead><tbody>${sectorRows}</tbody></table>`;
+  const offset = liveIndicators.length;
+  const proxyRows = [
+    energy ? { name: "Nifty Energy (proxy)", ...energy } : null,
+    metal  ? { name: "Nifty Metal (proxy)",  ...metal  } : null,
+    fmcg   ? { name: "Nifty FMCG (proxy)",   ...fmcg   } : null,
+  ].filter(Boolean).map((ind, i) => {
+    if (!ind) return "";
+    const alt = (offset + i) % 2 === 0;
+    const changeColor = ind.changePct >= 0
+      ? (alt ? POS : POS_ALT)
+      : (alt ? NEG : NEG_ALT);
+    return `<tr>
+      <td ${alt ? TD : TD_ALT}>${ind.name}</td>
+      <td ${alt ? TD : TD_ALT}>${fmtClose(ind.close)}</td>
+      <td ${changeColor}>${fmtPct(ind.changePct)}</td>
+    </tr>`;
+  }).join("");
+
+  const table = `<table ${TABLE_STYLE}>
+    <thead><tr><th ${TH}>Indicator</th><th ${TH}>Value</th><th ${TH}>Change</th></tr></thead>
+    <tbody>${liveRows}${proxyRows}</tbody>
+  </table>`;
+
+  // Build context string for AI insight
+  const liveCtx = liveIndicators.map((ind) => `${ind.label}: ${ind.value} ${ind.change}`).join("\n");
+  const proxyCtx = [
+    energy ? `Nifty Energy: ${fmt(energy.close, energy.changePct)}` : "",
+    metal  ? `Nifty Metal: ${fmt(metal.close, metal.changePct)}`   : "",
+    fmcg   ? `Nifty FMCG: ${fmt(fmcg.close, fmcg.changePct)}`     : "",
+  ].filter(Boolean).join("\n");
 
   const macroRead = await analyzeWithDeepseek(
-    `You are a senior Indian equity analyst. Write 2–3 sentences for a "MACRO READ" insight box.
-Use the live search data (if any) for exact FX/commodity figures. Use sector proxy data for commodity sentiment.
-Explain: 1) what the energy/metal/FMCG performance signals for the macro backdrop, 2) whether this is a headwind or tailwind for broader Indian equities, 3) one specific sector implication.
-If live FX data is available in the search results, cite the exact rate. Never invent numbers. Plain text only — no HTML.`,
-    `Sector proxies:\n${energy ? `Nifty Energy: ${fmt(energy.close, energy.changePct)}` : ""}${metal ? `\nNifty Metal: ${fmt(metal.close, metal.changePct)}` : ""}${fmcg ? `\nNifty FMCG: ${fmt(fmcg.close, fmcg.changePct)}` : ""}\n\n${searchData ? "Live search data:\n" + searchData : "(Live FX/commodity search unavailable)"}`,
+    `You are a senior macro strategist at a top-tier institutional firm. Write 2–3 sentences for a "MACRO READ" insight box in the style of a JPMorgan Global Markets daily note.
+
+Rules:
+- Cite exact figures from the data (e.g. "Brent at $82.4/bbl, +1.2%")
+- Explain the direct transmission mechanism to Indian equities (CAD impact, FII flow direction, rate sensitivity, INR pressure)
+- End with one sector implication — which sector benefits or suffers and why
+- Be precise and directional. No hedging. Plain text only — no HTML.
+
+Example output style:
+"Brent at $82.4/bbl (+1.2%) adds ~12 bps upside risk to India's April CPI and widens the current account by an estimated $0.8bn/month at current run rates — net negative for INR, which is already testing 84.3 resistance. Nifty Energy's +2.62% advance prices ONGC and OIL as upstream beneficiaries, though downstream OMCs (BPCL, HPCL) face margin compression if under-recovery mechanisms are not revised. Gold at $3,300/oz signals persistent risk aversion globally; watch for FII equity outflows if the metal clears $3,350."`,
+    `Live FX/Commodity data:\n${liveCtx || "(unavailable — Yahoo Finance blocked)"}\n\nSector proxies:\n${proxyCtx}`,
     embedToken
   );
 
@@ -350,11 +409,26 @@ export async function generateCompanySection(
   try { newsCtx = await getStocksNews([ticker]); } catch { /* skip */ }
 
   const analysis = await analyzeWithDeepseek(
-    `You are a senior Indian equity analyst. Write a brief stock note with:
-1. A one-line summary of the stock's performance today
-2. 2–3 bullet points on news or catalysts (use only what's in the data — no invented facts)
-3. A one-sentence analyst take: bullish / neutral / bearish and the key reason
-Use • as bullet character. Plain text only — no HTML tags.`,
+    `You are a senior Indian equity analyst at a top-tier institutional firm. Write a stock note in the style of a Jefferies equity research flash note.
+
+Format (plain text, • for bullets, no HTML):
+Line 1: One-line performance summary with the % move and what drove it (use news if available; if not, infer from sector context)
+• Bullet 1: Key catalyst or news item with specific detail
+• Bullet 2: Technical or positioning observation (key level, volume, support/resistance)
+• Bullet 3: Risk to the thesis or upcoming catalyst to watch
+ANALYST TAKE: [Bullish/Neutral/Bearish] — one sentence with price target or key level and the primary reason
+
+Rules:
+- Cite exact prices from the data
+- Do not invent news not in the data
+- Be directional and specific — no hedging language
+
+Example output:
+HINDUNILVR +4.72% to ₹2,240 on Q4 PAT beat of ~8% vs consensus, driven by rural volume recovery.
+• Q4 volume growth of 4% YoY marks first positive quarter in six, signalling the rural demand inflection thesis is materialising
+• Stock broke above ₹2,200 resistance on 1.8x average volume — next technical target ₹2,350
+• Risk: commodity cost inflation (palm oil +12% QTD) could pressure margins in Q1 FY27
+ANALYST TAKE: Bullish — add to ₹2,200–₹2,230 with target ₹2,400; rural recovery and premiumisation drive a sustainable re-rating.`,
     `${ticker}: ${price ? fmt(price.close, price.changePct) : "price unavailable"}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
