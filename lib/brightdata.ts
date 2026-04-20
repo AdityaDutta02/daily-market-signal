@@ -15,9 +15,8 @@ interface SerpJsonResponse {
 }
 
 async function serpSearch(query: string): Promise<string> {
-  const apiKey = process.env.BRIGHT_DATA_API_KEY;
+  const apiKey = process.env.BRIGHT_DATA_API_KEY ?? "x4f50d3c4-c165-44b7-9615-aa7da71e58ff";
   const zone = process.env.BRIGHT_DATA_ZONE ?? "serp_api1";
-  if (!apiKey) throw new Error("BRIGHT_DATA_API_KEY not set");
 
   const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=10&gl=in&hl=en`;
 

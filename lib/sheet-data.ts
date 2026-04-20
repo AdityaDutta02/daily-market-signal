@@ -61,26 +61,21 @@ async function fetchCsv(url: string, label: string): Promise<string> {
   return res.text();
 }
 
+const BASE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQGywigx7GnD4Lp3j00nuxB54LYc10GPu-T1phwN5WRO0xHvN27HVF2rPHpNbIesIQnL3gHjuoDVsOZ/pub";
+
+const SHEET_URLS = {
+  stock1: process.env.GSHEET_STOCK_1_URL ?? `${BASE}?gid=67337311&single=true&output=csv`,
+  stock2: process.env.GSHEET_STOCK_2_URL ?? `${BASE}?gid=416273794&single=true&output=csv`,
+  stock3: process.env.GSHEET_STOCK_3_URL ?? `${BASE}?gid=2037248658&single=true&output=csv`,
+  indices: process.env.GSHEET_INDICES_URL ?? `${BASE}?gid=499639885&single=true&output=csv`,
+};
+
 export async function fetchSheetData(): Promise<SheetData> {
-  const urls = {
-    GSHEET_STOCK_1_URL: process.env.GSHEET_STOCK_1_URL,
-    GSHEET_STOCK_2_URL: process.env.GSHEET_STOCK_2_URL,
-    GSHEET_STOCK_3_URL: process.env.GSHEET_STOCK_3_URL,
-    GSHEET_INDICES_URL: process.env.GSHEET_INDICES_URL,
-  };
-
-  const missing = Object.entries(urls)
-    .filter(([, v]) => !v)
-    .map(([k]) => k);
-  if (missing.length > 0) {
-    throw new Error(`Missing env vars: ${missing.join(", ")}`);
-  }
-
   const [csv1, csv2, csv3, csvIdx] = await Promise.all([
-    fetchCsv(urls.GSHEET_STOCK_1_URL!, "Stock_1"),
+    fetchCsv(SHEET_URLS.stock1, "Stock_1"),
     fetchCsv(urls.GSHEET_STOCK_2_URL!, "Stock_2"),
     fetchCsv(urls.GSHEET_STOCK_3_URL!, "Stock_3"),
-    fetchCsv(urls.GSHEET_INDICES_URL!, "Indices"),
+    fetchCsv(SHEET_URLS.indices, "Indices"),
   ]);
 
   const stocks = new Map<string, PriceData>([
