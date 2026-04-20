@@ -69,3 +69,12 @@ export async function analyzeWithDeepseek(
     { role: "user", content: userPrompt },
   ], embedToken);
 }
+
+export async function searchWeb(
+  query: string,
+  embedToken: string,
+): Promise<GatewayResponse> {
+  return callGateway({ category: "search", tier: "standard" }, [
+    { role: "user", content: query },
+  ], embedToken);
+}
