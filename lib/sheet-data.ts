@@ -63,24 +63,24 @@ async function fetchCsv(url: string, label: string): Promise<string> {
 
 export async function fetchSheetData(): Promise<SheetData> {
   const urls = {
-    stock1: process.env.SHEET_CSV_STOCK1,
-    stock2: process.env.SHEET_CSV_STOCK2,
-    stock3: process.env.SHEET_CSV_STOCK3,
-    indices: process.env.SHEET_CSV_INDICES,
+    GSHEET_STOCK_1_URL: process.env.GSHEET_STOCK_1_URL,
+    GSHEET_STOCK_2_URL: process.env.GSHEET_STOCK_2_URL,
+    GSHEET_STOCK_3_URL: process.env.GSHEET_STOCK_3_URL,
+    GSHEET_INDICES_URL: process.env.GSHEET_INDICES_URL,
   };
 
   const missing = Object.entries(urls)
     .filter(([, v]) => !v)
-    .map(([k]) => `SHEET_CSV_${k.toUpperCase()}`);
+    .map(([k]) => k);
   if (missing.length > 0) {
     throw new Error(`Missing env vars: ${missing.join(", ")}`);
   }
 
   const [csv1, csv2, csv3, csvIdx] = await Promise.all([
-    fetchCsv(urls.stock1!, "Stock_1"),
-    fetchCsv(urls.stock2!, "Stock_2"),
-    fetchCsv(urls.stock3!, "Stock_3"),
-    fetchCsv(urls.indices!, "Indices"),
+    fetchCsv(urls.GSHEET_STOCK_1_URL!, "Stock_1"),
+    fetchCsv(urls.GSHEET_STOCK_2_URL!, "Stock_2"),
+    fetchCsv(urls.GSHEET_STOCK_3_URL!, "Stock_3"),
+    fetchCsv(urls.GSHEET_INDICES_URL!, "Indices"),
   ]);
 
   const stocks = new Map<string, PriceData>([
