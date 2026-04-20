@@ -1,5 +1,6 @@
 // lib/sheet-data.ts
 // Fetches 4 published Google Sheet CSV tabs and parses into a price map.
+// Falls back to Yahoo Finance if the sheet returns all #N/A (pre-market / formula lag).
 
 export interface PriceData {
   close: number;
@@ -10,6 +11,85 @@ export interface SheetData {
   stocks: Map<string, PriceData>;  // keyed by NSE ticker symbol e.g. "HDFCBANK"
   indices: Map<string, PriceData>; // keyed by index name e.g. "Nifty 50"
   fetchedAt: Date;
+}
+
+// ── Yahoo Finance fallback ─────────────────────────────────────────────────────
+
+const NIFTY50_YAHOO = [
+  "ADANIENT.NS","ADANIPORTS.NS","APOLLOHOSP.NS","ASIANPAINT.NS","AXISBANK.NS",
+  "BAJAJ-AUTO.NS","BAJFINANCE.NS","BAJAJFINSV.NS","BPCL.NS","BHARTIARTL.NS",
+  "BRITANNIA.NS","CIPLA.NS","COALINDIA.NS","DIVISLAB.NS","DRREDDY.NS",
+  "EICHERMOT.NS","GRASIM.NS","HCLTECH.NS","HDFCBANK.NS","HDFCLIFE.NS",
+  "HEROMOTOCO.NS","HINDALCO.NS","HINDUNILVR.NS","ICICIBANK.NS","INDUSINDBK.NS",
+  "INFY.NS","ITC.NS","JSWSTEEL.NS","KOTAKBANK.NS","LT.NS",
+  "LTIM.NS","M%26M.NS","MARUTI.NS","NESTLEIND.NS","NTPC.NS",
+  "ONGC.NS","POWERGRID.NS","RELIANCE.NS","SBILIFE.NS","SBIN.NS",
+  "SUNPHARMA.NS","TATACONSUM.NS","TATAMOTORS.NS","TATASTEEL.NS","TCS.NS",
+  "TECHM.NS","TITAN.NS","TRENT.NS","ULTRACEMCO.NS","WIPRO.NS",
+];
+
+const INDEX_YAHOO: Array<{ symbol: string; name: string }> = [
+  { symbol: "^NSEI",      name: "Nifty 50"     },
+  { symbol: "^BSESN",     name: "Sensex"       },
+  { symbol: "^NSEBANK",   name: "Bank Nifty"   },
+  { symbol: "^CNXIT",     name: "Nifty IT"     },
+  { symbol: "^CNXPHARMA", name: "Nifty Pharma" },
+  { symbol: "^CNXAUTO",   name: "Nifty Auto"   },
+  { symbol: "^CNXMETAL",  name: "Nifty Metal"  },
+  { symbol: "^CNXENERGY", name: "Nifty Energy" },
+  { symbol: "^CNXFMCG",   name: "Nifty FMCG"  },
+  { symbol: "^CNXREALTY", name: "Nifty Realty" },
+];
+
+interface YahooQuoteResult {
+  symbol: string;
+  regularMarketPrice?: number;
+  regularMarketChangePercent?: number;
+}
+
+async function fetchYahooBatch(symbols: string[]): Promise<Map<string, { close: number; changePct: number }>> {
+  const map = new Map<string, { close: number; changePct: number }>();
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(",")}`,
+      {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; MarketBrief/1.0)" },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (!res.ok) return map;
+    const data = await res.json() as { quoteResponse?: { result?: YahooQuoteResult[] } };
+    for (const item of data.quoteResponse?.result ?? []) {
+      if (!item.regularMarketPrice) continue;
+      map.set(item.symbol, {
+        close: item.regularMarketPrice,
+        changePct: item.regularMarketChangePercent ?? 0,
+      });
+    }
+  } catch { /* return empty map */ }
+  return map;
+}
+
+async function fetchYahooFallbackStocks(): Promise<Map<string, PriceData>> {
+  const raw = await fetchYahooBatch(NIFTY50_YAHOO);
+  const out = new Map<string, PriceData>();
+  for (const [sym, data] of raw) {
+    // Strip .NS suffix; decode M%26M → M&M
+    const ticker = sym.replace(".NS", "").replace("M%26M", "M&M");
+    out.set(ticker, data);
+  }
+  return out;
+}
+
+async function fetchYahooFallbackIndices(): Promise<Map<string, PriceData>> {
+  const symbols = INDEX_YAHOO.map((i) => i.symbol);
+  const raw = await fetchYahooBatch(symbols);
+  const out = new Map<string, PriceData>();
+  for (const { symbol, name } of INDEX_YAHOO) {
+    const d = raw.get(symbol);
+    if (d) out.set(name, d);
+  }
+  return out;
 }
 
 function parseCsvRows(csv: string): Map<string, PriceData> {
@@ -78,13 +158,21 @@ export async function fetchSheetData(): Promise<SheetData> {
     fetchCsv(SHEET_URLS.indices, "Indices"),
   ]);
 
-  const stocks = new Map<string, PriceData>([
+  let stocks = new Map<string, PriceData>([
     ...parseCsvRows(csv1),
     ...parseCsvRows(csv2),
     ...parseCsvRows(csv3),
   ]);
 
-  const indices = parseIndicesCsvRows(csvIdx);
+  let indices = parseIndicesCsvRows(csvIdx);
+
+  // Sheet formulas return #N/A outside market hours — fall back to Yahoo Finance
+  const [fallbackStocks, fallbackIndices] = await Promise.all([
+    stocks.size === 0 ? fetchYahooFallbackStocks() : Promise.resolve(null),
+    indices.size === 0 ? fetchYahooFallbackIndices() : Promise.resolve(null),
+  ]);
+  if (fallbackStocks) stocks = fallbackStocks;
+  if (fallbackIndices) indices = fallbackIndices;
 
   return { stocks, indices, fetchedAt: new Date() };
 }
