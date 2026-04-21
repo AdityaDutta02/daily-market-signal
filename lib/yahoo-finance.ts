@@ -107,28 +107,34 @@ export const INDEX_MAP: Array<{ yahoo: string; name: string }> = [
   { yahoo: "^CNXREALTY",  name: "Nifty Realty" },
 ];
 
-export async function fetchAllNiftyStocks(): Promise<Map<string, QuoteData>> {
-  const results = await Promise.allSettled(
-    NIFTY50_MAP.map(async ({ yahoo, nse }) => ({ nse, data: await fetchYahooV8(yahoo) }))
-  );
+// Batch fetcher — groups of 10 with 200ms delay to avoid Yahoo rate limits
+async function batchFetchYahoo<T extends { yahoo: string }>(
+  items: T[],
+  keyFn: (item: T) => string,
+  batchSize = 10,
+): Promise<Map<string, QuoteData>> {
   const map = new Map<string, QuoteData>();
-  for (const r of results) {
-    if (r.status === "fulfilled" && r.value.data) {
-      map.set(r.value.nse, r.value.data);
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(async (item) => ({ key: keyFn(item), data: await fetchYahooV8(item.yahoo) }))
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value.data) {
+        map.set(r.value.key, r.value.data);
+      }
+    }
+    if (i + batchSize < items.length) {
+      await new Promise((res) => setTimeout(res, 200));
     }
   }
   return map;
 }
 
+export async function fetchAllNiftyStocks(): Promise<Map<string, QuoteData>> {
+  return batchFetchYahoo(NIFTY50_MAP, (s) => s.nse);
+}
+
 export async function fetchAllIndices(): Promise<Map<string, QuoteData>> {
-  const results = await Promise.allSettled(
-    INDEX_MAP.map(async ({ yahoo, name }) => ({ name, data: await fetchYahooV8(yahoo) }))
-  );
-  const map = new Map<string, QuoteData>();
-  for (const r of results) {
-    if (r.status === "fulfilled" && r.value.data) {
-      map.set(r.value.name, r.value.data);
-    }
-  }
-  return map;
+  return batchFetchYahoo(INDEX_MAP, (s) => s.name);
 }

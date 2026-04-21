@@ -188,6 +188,10 @@ async function buildStocksToWatchHtml(sheetData: SheetData, embedToken: string):
 
   const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Stock</th><th ${TH}>Price</th><th ${TH}>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
 
+  if (top10.length === 0) {
+    return insightBox("SIGNALS", "Live session data unavailable — signals will generate once NSE opens at 9:15 AM IST.");
+  }
+
   let volumeCtx = "";
   try { volumeCtx = await getVolumeLeaders(); } catch { /* skip */ }
 
@@ -233,6 +237,10 @@ async function buildSectoralPulseHtml(sheetData: SheetData, embedToken: string):
   }).join("");
 
   const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Sector</th><th ${TH}>Level</th><th ${TH}>Change</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  if (available.length === 0) {
+    return insightBox("ROTATION THEME", "Live session data unavailable — sector rotation analysis will generate once NSE opens at 9:15 AM IST.");
+  }
 
   const rotation = await analyze(
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write 2–3 sentences on sector rotation in the style of a BlackRock Investment Institute daily note.
