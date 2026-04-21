@@ -264,6 +264,16 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
     } catch { show("Failed to send preview.", "error"); } finally { setSaving(false); }
   }
 
+  async function refreshData() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cron/refresh-snapshot", { method: "POST", headers: ah(token) });
+      const data = await res.json();
+      if (!res.ok) show(data.error ?? "Refresh failed", "error");
+      else show(`Market data refreshed — ${data.stocks ?? 0} stocks, ${data.indices ?? 0} indices`);
+    } catch { show("Failed to refresh data.", "error"); } finally { setSaving(false); }
+  }
+
   async function toggleActive() {
     setToggling(true);
     try {
@@ -297,6 +307,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
           <button className={`status-pill${prefs.is_active ? " active" : " paused"}`} onClick={toggleActive} disabled={toggling} style={{ cursor: "pointer", border: "none" }}>
             {prefs.is_active ? "Active" : "Paused"}
           </button>
+          {!editing && <button className="btn btn-secondary" onClick={refreshData} disabled={saving} title="Fetch latest market prices now">↻ Data</button>}
           {!editing && <button className="btn btn-secondary" onClick={sendPreview} disabled={saving}>{saving ? <span className="spinner" /> : null}Preview</button>}
           {!editing && <button className="btn btn-secondary" onClick={() => { setDraft(prefs); setEditing(true); }}>Edit</button>}
         </div>

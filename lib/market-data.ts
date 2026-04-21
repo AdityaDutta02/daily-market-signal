@@ -266,14 +266,16 @@ async function buildEarningsRadarHtml(embedToken: string): Promise<string> {
   let rawData = "";
   try { rawData = await getEarningsCalendar(); } catch { /* skip */ }
 
+  const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const result = await analyze(
-    `You are a senior Indian equity analyst. Using the earnings data provided (or your knowledge of the current Q4 FY2026 earnings season if data is sparse), write:
-1. A plain-text table of upcoming results in this exact format, one per line:
+    `You are a senior Indian equity analyst. Today's date is ${todayISO}.
+Using the earnings data provided (or your knowledge of the current Q4 FY2026 earnings season if data is sparse), write:
+1. A plain-text table of UPCOMING results (date >= today) in this exact format, one per line:
    COMPANY | DATE | EXPECTATION | SURPRISE_RISK
 2. Then write 1–2 sentences for an "Earnings Watch" insight box naming the results with highest surprise potential.
 Separate the table and insight with the text "---INSIGHT---".
-For the table, use plain text only.`,
-    rawData || "Q4 FY2026 earnings season, NSE/BSE India. Use your knowledge of major upcoming results.",
+For the table, use plain text only. Only include companies that have NOT yet reported as of today.`,
+    rawData || `Q4 FY2026 earnings season, NSE/BSE India. Today is ${todayISO}. Use your knowledge of upcoming results.`,
     embedToken
   );
 

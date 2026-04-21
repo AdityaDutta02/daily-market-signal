@@ -10,7 +10,7 @@ export interface QuoteData {
 export async function fetchYahooV8(symbol: string): Promise<QuoteData | null> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
       {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; MarketBrief/1.0)" },
         signal: AbortSignal.timeout(8000),
