@@ -304,7 +304,7 @@ async function buildMacroDashboardHtml(sheetData: SheetData, embedToken: string)
   const metal  = sheetData.indices.get("Nifty Metal");
   const fmcg   = sheetData.indices.get("Nifty FMCG");
 
-  const liveIndicators = await fetchMacroIndicators();
+  const liveIndicators = sheetData.macro?.length ? sheetData.macro : await fetchMacroIndicators();
 
   // Build table: live indicators first, then sector proxies
   const liveRows = liveIndicators.map((ind, i) => {

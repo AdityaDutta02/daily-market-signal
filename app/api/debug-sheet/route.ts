@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const data = await fetchSheetData();
+    const data = await fetchSheetData(embedToken);
     const stockSample = Object.fromEntries(
       [...data.stocks.entries()].slice(0, 10)
     );

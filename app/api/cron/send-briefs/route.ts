@@ -9,6 +9,7 @@ import {
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
 import { fetchSheetData } from "@/lib/sheet-data";
+import { checkAndDeductCredits, EMAIL_CREDIT_COST } from "@/lib/credits";
 
 interface ItemRow {
   id: string;
@@ -50,13 +51,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Fetch market data once for all users in this batch
+  const sheetData = await fetchSheetData(embedToken);
+
   const sent: string[] = [];
+  const skipped: string[] = [];
+
   for (const user of matchingUsers) {
     const presets = (user.data.presets as PresetType[]) ?? [];
     const companies = (user.data.companies as string[]) ?? [];
     const userId = user.data.user_id as string;
 
-    const sheetData = await fetchSheetData();
+    try {
+      await checkAndDeductCredits(embedToken);
+    } catch {
+      skipped.push(userId);
+      continue;
+    }
+
     const sections: string[] = [];
     for (const preset of presets) {
       sections.push(await generatePresetSection(preset, embedToken, sheetData));
@@ -90,6 +102,7 @@ export async function POST(request: NextRequest) {
           presets,
           companies,
           brief_html: html,
+          credits_used: EMAIL_CREDIT_COST,
           sent_at: new Date().toISOString(),
         },
       },
@@ -99,5 +112,5 @@ export async function POST(request: NextRequest) {
     sent.push(userId);
   }
 
-  return NextResponse.json({ sent: sent.length, users: sent });
+  return NextResponse.json({ sent: sent.length, users: sent, skipped });
 }
