@@ -75,6 +75,42 @@ export async function getVolumeLeaders(): Promise<string> {
   );
 }
 
+export interface NSEEarningsEntry {
+  symbol: string;
+  company: string;
+  date: string; // "22-Apr-2026"
+  purpose: string;
+}
+
+/** Fetch upcoming board meetings for Financial Results from NSE event calendar.
+ *  Two-step: homepage visit to get session cookies, then API call. */
+export async function fetchNSEEarningsCalendar(): Promise<NSEEarningsEntry[]> {
+  const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  const headers: HeadersInit = { "User-Agent": ua, "Accept": "text/html,application/xhtml+xml,*/*" };
+  const signal = AbortSignal.timeout(10000);
+
+  // Step 1: visit homepage to acquire session cookies
+  const homeRes = await fetch("https://www.nseindia.com/", { headers, signal });
+  const rawCookies = homeRes.headers.getSetCookie?.() ?? [];
+  const cookieStr = rawCookies.map((c) => c.split(";")[0]).join("; ");
+
+  // Step 2: call the event-calendar API
+  const apiRes = await fetch("https://www.nseindia.com/api/event-calendar?index=equities", {
+    headers: {
+      "User-Agent": ua,
+      "Accept": "application/json, text/plain, */*",
+      "Referer": "https://www.nseindia.com/",
+      "Cookie": cookieStr,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!apiRes.ok) return [];
+  const data = await apiRes.json() as NSEEarningsEntry[];
+  if (!Array.isArray(data)) return [];
+  return data.filter((e) => e.purpose?.includes("Financial Results"));
+}
+
 /** NSE/BSE quarterly earnings results and upcoming schedule this week. */
 export async function getEarningsCalendar(): Promise<string> {
   return serpSearch(

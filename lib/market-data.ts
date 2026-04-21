@@ -9,7 +9,7 @@ import {
 import {
   getStocksNews,
   getVolumeLeaders,
-  getEarningsCalendar,
+  fetchNSEEarningsCalendar,
 } from "./brightdata";
 import { fetchMacroIndicators } from "./macro-fetch";
 import type { SheetData } from "./sheet-data";
@@ -262,55 +262,94 @@ Example output style:
 
 // ── Earnings Radar ────────────────────────────────────────────────────────────
 
-async function buildEarningsRadarHtml(embedToken: string): Promise<string> {
-  let rawData = "";
-  try { rawData = await getEarningsCalendar(); } catch { /* skip */ }
+const NIFTY50_SET = new Set(NIFTY50_SYMBOLS);
 
-  const todayISO = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+async function buildEarningsRadarHtml(embedToken: string): Promise<string> {
+  const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const todayDate = new Date(todayIST);
+  const cutoff = new Date(todayDate);
+  cutoff.setDate(cutoff.getDate() + 21); // next 3 weeks
+
+  // Fetch real NSE earnings calendar
+  let upcoming: Array<{ symbol: string; company: string; date: string }> = [];
+  try {
+    const entries = await fetchNSEEarningsCalendar();
+    upcoming = entries
+      .filter((e) => {
+        const d = new Date(e.date); // "22-Apr-2026" parses fine in V8
+        return d >= todayDate && d <= cutoff;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 12);
+    // Sort: Nifty50 first, then others
+    upcoming.sort((a, b) => {
+      const aN = NIFTY50_SET.has(a.symbol) ? 0 : 1;
+      const bN = NIFTY50_SET.has(b.symbol) ? 0 : 1;
+      if (aN !== bN) return aN - bN;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+    upcoming = upcoming.slice(0, 8);
+  } catch { /* fall through to unavailable */ }
+
+  if (upcoming.length === 0) {
+    return `<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Earnings calendar not available right now.</p>`;
+  }
+
+  // Ask AI only for expectation + surprise risk — dates and companies come from NSE
+  const companyList = upcoming.map((e) => `${e.company} (${e.symbol})`).join(", ");
   const result = await analyze(
-    `You are a senior Indian equity analyst. Today's date is ${todayISO}.
-Using the earnings data provided (or your knowledge of the current Q4 FY2026 earnings season if data is sparse), write:
-1. A plain-text table of UPCOMING results (date >= today) in this exact format, one per line:
-   COMPANY | DATE | EXPECTATION | SURPRISE_RISK
-2. Then write 1–2 sentences for an "Earnings Watch" insight box naming the results with highest surprise potential.
-Separate the table and insight with the text "---INSIGHT---".
-For the table, use plain text only. Only include companies that have NOT yet reported as of today.`,
-    rawData || `Q4 FY2026 earnings season, NSE/BSE India. Today is ${todayISO}. Use your knowledge of upcoming results.`,
+    `You are a senior Indian equity analyst. For each company listed, provide:
+- EXPECTATION: a brief analyst consensus estimate (e.g. "18% YoY PAT growth", "margin pressure expected")
+- SURPRISE_RISK: one word — High, Medium, or Low
+
+Return one line per company in this exact format (no header, no extra text):
+SYMBOL | EXPECTATION | SURPRISE_RISK
+
+Companies: ${companyList}`,
+    `Q4 FY2026 earnings season. Companies reporting soon.`,
     embedToken
   );
 
-  const content = result.choices[0].message.content;
-  const parts = content.split("---INSIGHT---");
-  const tableData = parts[0]?.trim() ?? "";
-  const insightText = parts[1]?.trim() ?? content;
+  const aiLines = (result.choices[0].message.content ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.includes("|"));
 
-  const todayDate = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+  const aiMap = new Map<string, { expectation: string; risk: string }>();
+  for (const line of aiLines) {
+    const [sym, exp, risk] = line.split("|").map((s) => s.trim());
+    if (sym) aiMap.set(sym.toUpperCase(), { expectation: exp ?? "", risk: risk ?? "" });
+  }
 
-  const tableRows = tableData.split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("COMPANY") && line.includes("|"))
-    .filter((line) => {
-      const datePart = line.split("|")[1]?.trim() ?? "";
-      const parsed = new Date(datePart);
-      // Keep row only if date is today or future, or if date is unparseable
-      return isNaN(parsed.getTime()) || parsed >= todayDate;
-    })
-    .map((line, i) => {
-      const [company, date, expectation, risk] = line.split("|").map((s) => s.trim());
-      const alt = i % 2 === 1;
-      const riskColor = risk?.toLowerCase().includes("high") ? "#DE350B" : risk?.toLowerCase().includes("medium") ? "#C9A84C" : "#00875A";
-      return `<tr>
-        <td ${alt ? TD_ALT : TD}>${company ?? ""}</td>
-        <td ${alt ? TD_ALT : TD}>${date ?? ""}</td>
-        <td ${alt ? TD_ALT : TD}>${expectation ?? ""}</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #EEF0F3;font-size:13px;color:${riskColor};font-weight:600;${alt ? "background:#F8F9FB;" : ""}">${risk ?? ""}</td>
-      </tr>`;
-    }).join("");
+  const tableRows = upcoming.map((entry, i) => {
+    const ai = aiMap.get(entry.symbol.toUpperCase()) ?? { expectation: "—", risk: "Medium" };
+    const alt = i % 2 === 1;
+    const riskColor = ai.risk.toLowerCase().includes("high") ? "#DE350B"
+      : ai.risk.toLowerCase().includes("low") ? "#00875A" : "#C9A84C";
+    const displayDate = new Date(entry.date).toLocaleDateString("en-IN", {
+      day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
+    });
+    return `<tr>
+      <td ${alt ? TD_ALT : TD}>${entry.company}</td>
+      <td ${alt ? TD_ALT : TD}>${displayDate}</td>
+      <td ${alt ? TD_ALT : TD}>${ai.expectation}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #EEF0F3;font-size:13px;color:${riskColor};font-weight:600;${alt ? "background:#F8F9FB;" : ""}">${ai.risk}</td>
+    </tr>`;
+  }).join("");
 
-  const table = tableRows
-    ? `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Company</th><th ${TH}>Date</th><th ${TH}>Expectation</th><th ${TH}>Surprise Risk</th></tr></thead><tbody>${tableRows}</tbody></table>`
-    : `<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Earnings data not available for this period.</p>`;
+  // Generate insight blurb
+  const highRisk = upcoming.filter((e) => {
+    const ai = aiMap.get(e.symbol.toUpperCase());
+    return ai?.risk?.toLowerCase().includes("high");
+  }).map((e) => e.company);
+  const insightResult = await analyze(
+    `Write 1–2 sentences for an "Earnings Watch" box. Focus on the highest-surprise companies among: ${companyList}. Be specific, no generic filler.`,
+    `High-surprise candidates: ${highRisk.join(", ") || companyList}`,
+    embedToken
+  );
+  const insightText = insightResult.choices[0].message.content?.trim() ?? "";
 
+  const table = `<table ${TABLE_STYLE}><thead><tr><th ${TH}>Company</th><th ${TH}>Date</th><th ${TH}>Expectation</th><th ${TH}>Surprise Risk</th></tr></thead><tbody>${tableRows}</tbody></table>`;
   return table + insightBox("EARNINGS WATCH", insightText);
 }
 
