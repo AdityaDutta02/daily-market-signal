@@ -78,7 +78,7 @@ export async function getVolumeLeaders(): Promise<string> {
 /** NSE/BSE quarterly earnings results and upcoming schedule this week. */
 export async function getEarningsCalendar(): Promise<string> {
   return serpSearch(
-    "NSE BSE India quarterly earnings results Q4 FY2026 this week surprises"
+    "NSE BSE India Q4 FY2026 upcoming earnings results schedule next week"
   );
 }
 

@@ -284,9 +284,17 @@ For the table, use plain text only. Only include companies that have NOT yet rep
   const tableData = parts[0]?.trim() ?? "";
   const insightText = parts[1]?.trim() ?? content;
 
+  const todayDate = new Date(new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }));
+
   const tableRows = tableData.split("\n")
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith("COMPANY") && line.includes("|"))
+    .filter((line) => {
+      const datePart = line.split("|")[1]?.trim() ?? "";
+      const parsed = new Date(datePart);
+      // Keep row only if date is today or future, or if date is unparseable
+      return isNaN(parsed.getTime()) || parsed >= todayDate;
+    })
     .map((line, i) => {
       const [company, date, expectation, risk] = line.split("|").map((s) => s.trim());
       const alt = i % 2 === 1;
