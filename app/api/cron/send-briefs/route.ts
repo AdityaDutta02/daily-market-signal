@@ -9,7 +9,6 @@ import {
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
 import { fetchSheetData } from "@/lib/sheet-data";
-import { checkAndDeductCredits, EMAIL_CREDIT_COST } from "@/lib/credits";
 
 interface ItemRow {
   id: string;
@@ -62,13 +61,6 @@ export async function POST(request: NextRequest) {
     const companies = (user.data.companies as string[]) ?? [];
     const userId = user.data.user_id as string;
 
-    try {
-      await checkAndDeductCredits(embedToken);
-    } catch {
-      skipped.push(userId);
-      continue;
-    }
-
     const sections: string[] = [];
     for (const preset of presets) {
       sections.push(await generatePresetSection(preset, embedToken, sheetData));
@@ -102,7 +94,6 @@ export async function POST(request: NextRequest) {
           presets,
           companies,
           brief_html: html,
-          credits_used: EMAIL_CREDIT_COST,
           sent_at: new Date().toISOString(),
         },
       },
