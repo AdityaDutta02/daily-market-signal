@@ -10,5 +10,5 @@ export async function GET(request: NextRequest) {
 
   const symbols = await getTickerList(embedToken);
   const results = searchTickers(query, symbols);
-  return NextResponse.json(results);
+  return NextResponse.json({ results });
 }
