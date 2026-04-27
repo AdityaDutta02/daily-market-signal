@@ -158,12 +158,13 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
 Rules:
 - Name the sector theme with precise language (e.g. "defensive rotation into staples", "earnings-driven re-rating in utilities")
 - If news context is provided, reference it to explain specific moves — do not invent facts absent from the data
-- End with one actionable, directional observation with a clear rationale
+- End with one observational note on the key market dynamic to monitor — no buy/sell/hold recommendations
 - Be specific, opinionated, and concise. No hedge words ("may", "could", "might"). No filler phrases
 - Output ONLY the insight text — no HTML, no bullet points, no preamble
+- DO NOT use words like buy, sell, hold, overweight, underweight, add, trim, avoid, accumulate, or any investment recommendation language
 
 Example style (use synthetic names below as style reference ONLY — never use these names in output):
-"ALPHACORP +4.7%, BETAFMCG +2.7% — defensive rotation into staples as GAMMAIT -3.7% extends de-rating on muted guidance. Institutional accumulation breadth across price points confirms the rotation is durable, not retail-led. Tactically overweight ALPHACORP through month-end; trim GAMMAIT into any bounce."`,
+"ALPHACORP +4.7%, BETAFMCG +2.7% — defensive rotation into staples as GAMMAIT -3.7% extends de-rating on muted guidance. Institutional accumulation breadth across price points confirms the rotation is durable, not retail-led. Watch whether GAMMAIT guidance revisions emerge before the sector de-rating broadens further."`,
     `Gainers: ${gainers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\nLosers: ${losers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
@@ -199,16 +200,16 @@ async function buildStocksToWatchHtml(sheetData: SheetData, embedToken: string):
     `You are a senior Indian equity analyst at a top-tier institutional firm. Write 3–5 bullet points for a "Signals" watchlist in the style of a Morgan Stanley daily note.
 
 Rules:
-- Each bullet: stock ticker, current move, and a one-line thesis (catalyst, key level, volume anomaly, upcoming event, or risk/reward setup)
-- Be directional — say "buy", "avoid", "watch for", "trim" — not just "interesting"
+- Each bullet: stock ticker, current move, and a one-line thesis (catalyst, key level, volume anomaly, upcoming event, or technical observation)
 - Include price levels where relevant (e.g. "support at ₹195", "resistance at ₹310")
 - No filler. No invented facts. Use only what's in the data.
 - Use • as bullet character. Plain text only — no HTML.
+- DO NOT use investment recommendation language: no buy, sell, hold, add, trim, avoid, accumulate, overweight, underweight. Describe what is happening, not what to do.
 
 Example style (synthetic names for style reference ONLY — never use these names in output):
-• ALPHACORP (+4.72%) — earnings-led breakout above ₹2,200 resistance; next target ₹2,350. Add on any intraday pullback to ₹2,210.
-• GAMMATECH (-3.70%) — volume 2.3x average on guidance miss; avoid until ₹195 support is tested. Risk-reward skewed negative through results season.
-• DELTAUTILITY (+2.39%) — steady FII-driven bid ahead of RBI; hold existing positions, not a chase.`,
+• ALPHACORP (+4.72%) — earnings-led breakout above ₹2,200 resistance on 1.8x average volume; next technical level ₹2,350. Watch for continuation above ₹2,210.
+• GAMMATECH (-3.70%) — volume 2.3x average on guidance miss; ₹195 is the key support level to watch. De-rating may extend through results season.
+• DELTAUTILITY (+2.39%) — steady FII-driven bid ahead of RBI; momentum intact while ₹520 holds as support.`,
     `Top movers:\n${top10.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n")}\n${volumeCtx ? "\nVolume leaders:\n" + volumeCtx : ""}`,
     embedToken
   );
@@ -248,11 +249,12 @@ async function buildSectoralPulseHtml(sheetData: SheetData, embedToken: string):
 Rules:
 - Name the 1–2 leading sectors and 1–2 lagging sectors with their exact % moves
 - Explain the macro or fundamental story driving the rotation (risk-on/off, rate sensitivity, earnings cycle, FII flows, commodity linkage)
-- End with one specific sector to position in for the next session with a clear rationale and risk
+- End with one observational note on which sector setup looks most significant for the next session and why — no investment recommendations
 - Be precise and opinionated. No hedging language. Plain text only — no HTML.
+- DO NOT use investment recommendation language: no buy, sell, hold, position in, add, trim, avoid, accumulate, overweight, underweight.
 
 Example output style:
-"Energy (+2.62%) and FMCG (+2.43%) lead today's advance, consistent with a defensive/commodity tilt as IT (-0.73%) and Pharma (-0.04%) underperform — the latter two are underweight in current FII positioning ahead of US Q1 earnings risk. The rotation out of growth into value/defensives mirrors last Thursday's pattern before the RBI policy surprise. Position in Nifty Energy for tomorrow; upstream oil names (ONGC, OIL) offer the best risk-reward if Brent holds above $82."`,
+"Energy (+2.62%) and FMCG (+2.43%) lead today's advance, consistent with a defensive/commodity tilt as IT (-0.73%) and Pharma (-0.04%) underperform — the latter two reflect reduced FII positioning ahead of US Q1 earnings risk. The rotation out of growth into value/defensives mirrors last Thursday's pattern before the RBI policy surprise. Nifty Energy shows the strongest momentum setup heading into tomorrow; watch whether upstream names (ONGC, OIL) extend gains if Brent holds above $82."`,
     available.map((e) => `${e.name}: ${fmtPct(e.changePct)}`).join("\n"),
     embedToken
   );
@@ -473,20 +475,21 @@ Format (plain text, • for bullets, no HTML):
 Line 1: One-line performance summary with the % move and what drove it (use news if available; if not, infer from sector context)
 • Bullet 1: Key catalyst or news item with specific detail
 • Bullet 2: Technical or positioning observation (key level, volume, support/resistance)
-• Bullet 3: Risk to the thesis or upcoming catalyst to watch
-ANALYST TAKE: [Bullish/Neutral/Bearish] — one sentence with price target or key level and the primary reason
+• Bullet 3: Risk factor or upcoming catalyst to monitor
+KEY OBSERVATION: one sentence on the primary theme driving this stock and what level/event to watch next
 
 Rules:
 - Cite exact prices from the data
 - Do not invent news not in the data
 - Be directional and specific — no hedging language
+- DO NOT use investment recommendation language: no buy, sell, hold, add, trim, avoid, accumulate, overweight, underweight, price target. This is an informational brief only.
 
 Example style (synthetic names for style reference ONLY — never use these names in output):
 ALPHACORP +4.72% to ₹2,240 on Q4 PAT beat of ~8% vs consensus, driven by rural volume recovery.
 • Q4 volume growth of 4% YoY marks first positive quarter in six, signalling the rural demand inflection thesis is materialising
-• Stock broke above ₹2,200 resistance on 1.8x average volume — next technical target ₹2,350
+• Stock broke above ₹2,200 resistance on 1.8x average volume — next technical level ₹2,350
 • Risk: commodity cost inflation (palm oil +12% QTD) could pressure margins in Q1 FY27
-ANALYST TAKE: Bullish — add to ₹2,200–₹2,230 with target ₹2,400; rural recovery and premiumisation drive a sustainable re-rating.`,
+KEY OBSERVATION: Rural recovery and premiumisation are the key themes in play; ₹2,200 is the structural level to watch if momentum stalls.`,
     `${ticker}: ${price ? fmt(price.close, price.changePct) : "price unavailable"}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );

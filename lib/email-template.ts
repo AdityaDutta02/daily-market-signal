@@ -53,7 +53,7 @@ export function wrapEmailHtml(sections: string[], date: string): string {
               <tr>
                 <td>
                   <div style="font-size:10px;color:#4A5C72;line-height:1.7;">
-                    This report is generated for informational purposes only and does not constitute investment advice.<br>
+                    <strong style="color:#8B9EB7;">DISCLAIMER:</strong> This report is for informational purposes only and does not constitute investment advice, a solicitation, or a recommendation to buy, sell, or hold any security. Nothing in this brief should be construed as financial advice. Always consult a registered financial adviser before making investment decisions.<br>
                     Past performance is not indicative of future results. Data sourced from NSE/BSE public feeds.
                   </div>
                 </td>
