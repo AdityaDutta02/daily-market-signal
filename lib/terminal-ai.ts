@@ -1,5 +1,7 @@
 const GATEWAY_URL = process.env.TERMINAL_AI_GATEWAY_URL!;
 
+const NO_ADVICE_PREFIX = `CRITICAL RULE — NEVER VIOLATE: This is an informational market data brief. You MUST NOT use any investment recommendation language. Strictly forbidden words and phrases: buy, sell, hold, accumulate, add, trim, exit, avoid, overweight, underweight, long, short, position in, go long, go short, price target, target price, stop loss, take profit, profit-taking, entry point, initiate coverage. If you catch yourself about to write any of these, replace with observational language (e.g. "watch", "monitor", "levels to observe", "setup to track"). Violation of this rule is not acceptable under any circumstance.\n\n`;
+
 interface GatewayMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -65,7 +67,7 @@ export async function analyzeWithDeepseek(
   embedToken: string,
 ): Promise<GatewayResponse> {
   return callGateway({ category: "chat", tier: "fast" }, [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: NO_ADVICE_PREFIX + systemPrompt },
     { role: "user", content: userPrompt },
   ], embedToken);
 }
@@ -78,12 +80,12 @@ export async function analyzeWithGemini(
   // Try Gemini Flash for reasoning-heavy insight generation; fall back to Deepseek on error
   try {
     return await callGateway({ category: "reasoning", tier: "standard" }, [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: NO_ADVICE_PREFIX + systemPrompt },
       { role: "user", content: userPrompt },
     ], embedToken);
   } catch {
     return callGateway({ category: "chat", tier: "fast" }, [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: NO_ADVICE_PREFIX + systemPrompt },
       { role: "user", content: userPrompt },
     ], embedToken);
   }
