@@ -153,18 +153,18 @@ async function buildNiftyMoversHtml(sheetData: SheetData, embedToken: string): P
   try { newsCtx = await getStocksNews(topSymbols); } catch { /* no news */ }
 
   const pulse = await analyze(
-    `You are a senior Indian equity analyst at a top-tier institutional firm. Write a 2–3 sentence "Market Pulse" in the style of a Goldman Sachs morning note.
+    `You are an Indian equity market data analyst. Write a 2–3 sentence "Market Pulse" summarising today's session data.
 
 Rules:
 - Name the sector theme with precise language (e.g. "defensive rotation into staples", "earnings-driven re-rating in utilities")
 - If news context is provided, reference it to explain specific moves — do not invent facts absent from the data
-- End with one observational note on the key market dynamic to monitor — no buy/sell/hold recommendations
-- Be specific, opinionated, and concise. No hedge words ("may", "could", "might"). No filler phrases
+- End with one observational note on the key market dynamic to monitor
+- Be specific and concise. No hedge words ("may", "could", "might"). No filler phrases
 - Output ONLY the insight text — no HTML, no bullet points, no preamble
-- DO NOT use words like buy, sell, hold, overweight, underweight, add, trim, avoid, accumulate, or any investment recommendation language
+- STRICTLY FORBIDDEN: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit. Violation is not acceptable. Use only observational language: "watch", "monitor", "note", "track".
 
 Example style (use synthetic names below as style reference ONLY — never use these names in output):
-"ALPHACORP +4.7%, BETAFMCG +2.7% — defensive rotation into staples as GAMMAIT -3.7% extends de-rating on muted guidance. Institutional accumulation breadth across price points confirms the rotation is durable, not retail-led. Watch whether GAMMAIT guidance revisions emerge before the sector de-rating broadens further."`,
+"ALPHACORP +4.7%, BETAFMCG +2.7% — defensive rotation into staples as GAMMAIT -3.7% extends de-rating on muted guidance. Breadth across price points confirms the rotation is durable, not retail-led. Watch whether GAMMAIT guidance revisions emerge before the sector de-rating broadens further."`,
     `Gainers: ${gainers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\nLosers: ${losers.map((e) => `${e.symbol} ${fmtPct(e.changePct)}`).join(", ")}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
@@ -197,19 +197,19 @@ async function buildStocksToWatchHtml(sheetData: SheetData, embedToken: string):
   try { volumeCtx = await getVolumeLeaders(); } catch { /* skip */ }
 
   const signals = await analyze(
-    `You are a senior Indian equity analyst at a top-tier institutional firm. Write 3–5 bullet points for a "Signals" watchlist in the style of a Morgan Stanley daily note.
+    `You are an Indian equity market data analyst. Write 3–5 bullet points for a "Signals" watchlist.
 
 Rules:
-- Each bullet: stock ticker, current move, and a one-line thesis (catalyst, key level, volume anomaly, upcoming event, or technical observation)
+- Each bullet: stock ticker, current move, and a one-line observation (catalyst, key level, volume anomaly, upcoming event, or technical note)
 - Include price levels where relevant (e.g. "support at ₹195", "resistance at ₹310")
 - No filler. No invented facts. Use only what's in the data.
 - Use • as bullet character. Plain text only — no HTML.
-- DO NOT use investment recommendation language: no buy, sell, hold, add, trim, avoid, accumulate, overweight, underweight. Describe what is happening, not what to do.
+- STRICTLY FORBIDDEN: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit. Violation is not acceptable. Describe what IS happening, not what to do. Use: "watch", "monitor", "observe", "note", "track".
 
 Example style (synthetic names for style reference ONLY — never use these names in output):
-• ALPHACORP (+4.72%) — earnings-led breakout above ₹2,200 resistance on 1.8x average volume; next technical level ₹2,350. Watch for continuation above ₹2,210.
-• GAMMATECH (-3.70%) — volume 2.3x average on guidance miss; ₹195 is the key support level to watch. De-rating may extend through results season.
-• DELTAUTILITY (+2.39%) — steady FII-driven bid ahead of RBI; momentum intact while ₹520 holds as support.`,
+• ALPHACORP (+4.72%) — earnings-led breakout above ₹2,200 resistance on 1.8x average volume; next technical level to watch: ₹2,350.
+• GAMMATECH (-3.70%) — volume 2.3x average on guidance miss; ₹195 is the key support level to monitor. De-rating may extend through results season.
+• DELTAUTILITY (+2.39%) — FII-driven bid observed ahead of RBI; ₹520 is the level to watch as support.`,
     `Top movers:\n${top10.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n")}\n${volumeCtx ? "\nVolume leaders:\n" + volumeCtx : ""}`,
     embedToken
   );
@@ -244,17 +244,17 @@ async function buildSectoralPulseHtml(sheetData: SheetData, embedToken: string):
   }
 
   const rotation = await analyze(
-    `You are a senior Indian equity analyst at a top-tier institutional firm. Write 2–3 sentences on sector rotation in the style of a BlackRock Investment Institute daily note.
+    `You are an Indian equity market data analyst. Write 2–3 sentences on sector rotation observed in today's data.
 
 Rules:
 - Name the 1–2 leading sectors and 1–2 lagging sectors with their exact % moves
 - Explain the macro or fundamental story driving the rotation (risk-on/off, rate sensitivity, earnings cycle, FII flows, commodity linkage)
-- End with one observational note on which sector setup looks most significant for the next session and why — no investment recommendations
-- Be precise and opinionated. No hedging language. Plain text only — no HTML.
-- DO NOT use investment recommendation language: no buy, sell, hold, position in, add, trim, avoid, accumulate, overweight, underweight.
+- End with one observational note on which sector setup looks most significant to monitor and why
+- Be precise. No hedging language. Plain text only — no HTML.
+- STRICTLY FORBIDDEN: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit. Violation is not acceptable. Use only: "watch", "monitor", "observe", "note", "track".
 
 Example output style:
-"Energy (+2.62%) and FMCG (+2.43%) lead today's advance, consistent with a defensive/commodity tilt as IT (-0.73%) and Pharma (-0.04%) underperform — the latter two reflect reduced FII positioning ahead of US Q1 earnings risk. The rotation out of growth into value/defensives mirrors last Thursday's pattern before the RBI policy surprise. Nifty Energy shows the strongest momentum setup heading into tomorrow; watch whether upstream names (ONGC, OIL) extend gains if Brent holds above $82."`,
+"Energy (+2.62%) and FMCG (+2.43%) lead today's advance, consistent with a defensive/commodity tilt as IT (-0.73%) and Pharma (-0.04%) underperform — the latter two reflect reduced FII positioning ahead of US Q1 earnings risk. The rotation out of growth into value/defensives mirrors last Thursday's pattern before the RBI policy surprise. Nifty Energy shows the strongest momentum to monitor; watch whether upstream names (ONGC, OIL) extend gains if Brent holds above $82."`,
     available.map((e) => `${e.name}: ${fmtPct(e.changePct)}`).join("\n"),
     embedToken
   );
@@ -410,16 +410,17 @@ async function buildMacroDashboardHtml(sheetData: SheetData, embedToken: string)
   ].filter(Boolean).join("\n");
 
   const macroRead = await analyze(
-    `You are a senior macro strategist at a top-tier institutional firm. Write 2–3 sentences for a "MACRO READ" insight box in the style of a JPMorgan Global Markets daily note.
+    `You are an Indian macro market data analyst. Write 2–3 sentences for a "MACRO READ" insight box.
 
 Rules:
 - Cite exact figures from the data (e.g. "Brent at $82.4/bbl, +1.2%")
 - Explain the direct transmission mechanism to Indian equities (CAD impact, FII flow direction, rate sensitivity, INR pressure)
-- End with one sector implication — which sector benefits or suffers and why
-- Be precise and directional. No hedging. Plain text only — no HTML.
+- End with one sector observation — which sector is impacted and how to monitor it
+- Be precise. No hedging. Plain text only — no HTML.
+- STRICTLY FORBIDDEN: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit. Violation is not acceptable. This is data analysis only. Use: "watch", "monitor", "observe", "note".
 
 Example output style:
-"Brent at $82.4/bbl (+1.2%) adds ~12 bps upside risk to India's April CPI and widens the current account by an estimated $0.8bn/month at current run rates — net negative for INR, which is already testing 84.3 resistance. Nifty Energy's +2.62% advance prices ONGC and OIL as upstream beneficiaries, though downstream OMCs (BPCL, HPCL) face margin compression if under-recovery mechanisms are not revised. Gold at $3,300/oz signals persistent risk aversion globally; watch for FII equity outflows if the metal clears $3,350."`,
+"Brent at $82.4/bbl (+1.2%) adds ~12 bps upside risk to India's April CPI and widens the current account by an estimated $0.8bn/month at current run rates — net negative for INR, which is already testing 84.3 resistance. Nifty Energy's +2.62% advance reflects ONGC and OIL as upstream beneficiaries, though downstream OMCs (BPCL, HPCL) face margin compression if under-recovery mechanisms are not revised. Gold at $3,300/oz signals persistent risk aversion globally; watch for FII equity outflows if the metal clears $3,350."`,
     `Live FX/Commodity data:\n${liveCtx || "(unavailable — Yahoo Finance blocked)"}\n\nSector proxies:\n${proxyCtx}`,
     embedToken
   );
@@ -469,27 +470,27 @@ export async function generateCompanySection(
   try { newsCtx = await getStocksNews([ticker]); } catch { /* skip */ }
 
   const analysis = await analyze(
-    `You are a senior Indian equity analyst at a top-tier institutional firm. Write a stock note in the style of a Jefferies equity research flash note.
+    `You are an Indian equity market data analyst. Write a stock data note for an informational market brief.
 
 Format (plain text, • for bullets, no HTML):
 Line 1: One-line performance summary with the % move and what drove it (use news if available; if not, infer from sector context)
 • Bullet 1: Key catalyst or news item with specific detail
-• Bullet 2: Technical or positioning observation (key level, volume, support/resistance)
-• Bullet 3: Risk factor or upcoming catalyst to monitor
+• Bullet 2: Technical observation (key level, volume, support/resistance)
+• Bullet 3: Risk factor or upcoming event to monitor
 KEY OBSERVATION: one sentence on the primary theme driving this stock and what level/event to watch next
 
 Rules:
 - Cite exact prices from the data
 - Do not invent news not in the data
-- Be directional and specific — no hedging language
-- DO NOT use investment recommendation language: no buy, sell, hold, add, trim, avoid, accumulate, overweight, underweight, price target. This is an informational brief only.
+- Be specific — no hedging language
+- STRICTLY FORBIDDEN: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit, outperform, underperform. Violation is not acceptable. This is a data brief only. Use: "watch", "monitor", "observe", "note", "track".
 
 Example style (synthetic names for style reference ONLY — never use these names in output):
 ALPHACORP +4.72% to ₹2,240 on Q4 PAT beat of ~8% vs consensus, driven by rural volume recovery.
 • Q4 volume growth of 4% YoY marks first positive quarter in six, signalling the rural demand inflection thesis is materialising
-• Stock broke above ₹2,200 resistance on 1.8x average volume — next technical level ₹2,350
+• Stock cleared ₹2,200 resistance on 1.8x average volume — next technical level to watch: ₹2,350
 • Risk: commodity cost inflation (palm oil +12% QTD) could pressure margins in Q1 FY27
-KEY OBSERVATION: Rural recovery and premiumisation are the key themes in play; ₹2,200 is the structural level to watch if momentum stalls.`,
+KEY OBSERVATION: Rural recovery and premiumisation are the key themes in play; ₹2,200 is the structural level to monitor if momentum shifts.`,
     `${ticker}: ${price ? fmt(price.close, price.changePct) : "price unavailable"}\n${newsCtx ? "News:\n" + newsCtx : "(No news data)"}`,
     embedToken
   );
