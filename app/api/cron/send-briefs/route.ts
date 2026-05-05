@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbList, dbInsert } from "@/lib/db";
 import { sendEmail } from "@/lib/email-sdk";
-import { isMarketDay, getISTHour, getISTDate } from "@/lib/nse-holidays";
+import { isMarketDay, getISTDate } from "@/lib/nse-holidays";
 import {
   generatePresetSection,
-  generateCompanySection,
+  generateTop3MoversSection,
   PresetType,
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const currentHour = getISTHour();
   let rows: ItemRow[] = [];
   try {
     rows = await dbList<ItemRow>("items", {}, embedToken);
@@ -39,8 +38,7 @@ export async function POST(request: NextRequest) {
   const matchingUsers = rows.filter(
     (r) =>
       r.data.type === "user_preferences" &&
-      r.data.is_active === true &&
-      r.data.delivery_hour === currentHour
+      r.data.is_active === true
   );
 
   if (matchingUsers.length === 0) {
@@ -56,19 +54,15 @@ export async function POST(request: NextRequest) {
   const sent: string[] = [];
   const skipped: string[] = [];
 
+  const top3Section = await generateTop3MoversSection(embedToken, sheetData);
+
   for (const user of matchingUsers) {
     const presets = (user.data.presets as PresetType[]) ?? [];
-    const companies = (user.data.companies as string[]) ?? [];
     const userId = user.data.user_id as string;
 
-    const sections: string[] = [];
+    const sections: string[] = [top3Section];
     for (const preset of presets) {
       sections.push(await generatePresetSection(preset, embedToken, sheetData));
-    }
-    for (const company of companies) {
-      sections.push(
-        await generateCompanySection(company, embedToken, sheetData)
-      );
     }
 
     const date = istDate.toLocaleDateString("en-IN", {
@@ -92,7 +86,6 @@ export async function POST(request: NextRequest) {
           type: "email_log",
           user_id: userId,
           presets,
-          companies,
           brief_html: html,
           sent_at: new Date().toISOString(),
         },

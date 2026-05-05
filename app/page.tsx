@@ -62,16 +62,13 @@ type PresetType = "nifty_movers" | "stocks_to_watch" | "sectoral_pulse" | "earni
 interface Prefs {
   id?: string;
   presets: PresetType[];
-  companies: string[];
-  delivery_hour: number;
-  schedule_days: number[];
   is_active: boolean;
   setup_complete: boolean;
 }
 
 interface Brief {
   id: string;
-  data: { presets: PresetType[]; companies: string[]; brief_html: string; sent_at: string };
+  data: { presets: PresetType[]; brief_html: string; sent_at: string };
 }
 
 const PRESETS: { id: PresetType; name: string; description: string }[] = [
@@ -82,12 +79,7 @@ const PRESETS: { id: PresetType; name: string; description: string }[] = [
   { id: "macro_dashboard",  name: "Macro Dashboard",        description: "Key Indian macro indicators" },
 ];
 
-const HOURS = [6, 7, 8, 9, 10];
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 function ah(token: string) { return { Authorization: "Bearer " + token, "Content-Type": "application/json" }; }
-function fmtHour(h: number) { return h + " AM"; }
-function fmtDays(days: number[]) { return days.map((d) => DAY_LABELS[d]).join(", "); }
 function presetName(id: PresetType) { return PRESETS.find((p) => p.id === id)?.name ?? id; }
 
 // All HTML rendered via this function is sanitized with DOMPurify before storage in state.
@@ -127,96 +119,20 @@ function PresetGrid({ selected, onToggle }: { selected: PresetType[]; onToggle: 
   );
 }
 
-function TimeDay({ hour, days, onHour, onDay }: { hour: number; days: number[]; onHour: (h: number) => void; onDay: (d: number) => void }) {
-  return (
-    <>
-      <p className="section-label">Time (IST)</p>
-      <div className="time-selector" style={{ marginBottom: 18 }}>
-        {HOURS.map((h) => (
-          <div key={h} className={`time-option${h === hour ? " selected" : ""}`} onClick={() => onHour(h)}>{fmtHour(h)}</div>
-        ))}
-      </div>
-      <p className="section-label">Days</p>
-      <div className="day-selector">
-        {[1,2,3,4,5,6].map((d) => (
-          <button key={d} className={`day-btn${days.includes(d) ? " selected" : ""}`} onClick={() => onDay(d)}>{DAY_LABELS[d]}</button>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function TickerInput({ companies, onAdd, onRemove, token }: { companies: string[]; onAdd: (c: string) => void; onRemove: (c: string) => void; token: string }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<string[]>([]);
-  const [open, setOpen] = useState(false);
-  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (debRef.current) clearTimeout(debRef.current);
-    if (!query.trim()) { setResults([]); setOpen(false); return; }
-    debRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/tickers/search?q=${encodeURIComponent(query)}`, { headers: ah(token) });
-        const data = await res.json();
-        setResults(data.results ?? []); setOpen(true);
-      } catch { setResults([]); }
-    }, 200);
-  }, [query, token]);
-
-  function pick(c: string) { if (!companies.includes(c)) onAdd(c); setQuery(""); setResults([]); setOpen(false); }
-
-  return (
-    <div className="autocomplete-wrapper">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: companies.length > 0 ? 8 : 0 }}>
-        {companies.map((c) => (
-          <span key={c} className="chip">
-            {c}
-            <button className="chip-remove" onClick={() => onRemove(c)}>
-              <IcoX />
-            </button>
-          </span>
-        ))}
-      </div>
-      <input
-        placeholder={companies.length >= 3 ? "Max 3 companies" : "Search NSE company — e.g. RELIANCE"}
-        value={query}
-        disabled={companies.length >= 3}
-        onChange={(e) => setQuery(e.target.value)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onFocus={() => results.length > 0 && setOpen(true)}
-      />
-      {open && results.length > 0 && (
-        <div className="autocomplete-dropdown">
-          {results.map((r) => (
-            <div key={r} className="autocomplete-option" onMouseDown={() => pick(r)}>{r}</div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (p: Prefs) => void; show: (m: string, t?: "success" | "error") => void }) {
   const [step, setStep] = useState(0);
   const [presets, setPresets] = useState<PresetType[]>([]);
-  const [companies, setCompanies] = useState<string[]>([]);
-  const [hour, setHour] = useState(8);
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [sendPreview, setSendPreview] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function togglePreset(id: PresetType) {
     setPresets((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 2 ? prev : [...prev, id]);
   }
-  function toggleDay(d: number) {
-    setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b));
-  }
 
   async function activate() {
     setSaving(true);
     try {
-      const body = { presets, companies, delivery_hour: hour, schedule_days: days, is_active: true, setup_complete: true };
+      const body = { presets, is_active: true, setup_complete: true };
       const prefRes = await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify(body) });
       if (!prefRes.ok) {
         const err = await prefRes.json().catch(() => ({ error: "Save failed" }));
@@ -225,7 +141,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
       }
       await fetch("/api/schedule", { method: "POST", headers: ah(token), body: JSON.stringify({}) });
       if (sendPreview) {
-        const previewRes = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets, companies }) });
+        const previewRes = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets }) });
         if (!previewRes.ok) {
           const err = await previewRes.json().catch(() => ({ error: "Preview failed" }));
           show(err.error ?? "Failed to send preview email", "error");
@@ -235,7 +151,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
       } else {
         show("Setup complete! Your brief is scheduled.");
       }
-      onComplete({ presets, companies, delivery_hour: hour, schedule_days: days, is_active: true, setup_complete: true });
+      onComplete({ presets, is_active: true, setup_complete: true });
     } catch { show("Setup failed. Please try again.", "error"); }
     finally { setSaving(false); }
   }
@@ -245,7 +161,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
       <div className="wizard-card">
         {step > 0 && (
           <div className="wizard-progress">
-            {[1, 2, 3, 4].map((i) => (
+            {[1, 2].map((i) => (
               <div key={i} className={`wizard-progress-seg${step >= i ? " done" : ""}`} />
             ))}
           </div>
@@ -286,35 +202,6 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
     </>
   );
 
-  if (step === 2) return wrap(
-    <>
-      <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 5, color: "var(--text-1)" }}>
-        Track companies
-      </h2>
-      <p style={{ color: "var(--text-3)", marginBottom: 18, fontSize: 13 }}>Add up to 3 NSE-listed companies — optional</p>
-      <TickerInput companies={companies} onAdd={(c) => setCompanies((p) => [...p, c])} onRemove={(c) => setCompanies((p) => p.filter((x) => x !== c))} token={token} />
-      <div className="wizard-actions">
-        <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
-        <button className="btn btn-ghost" onClick={() => setStep(3)}>Skip</button>
-        <button className="btn btn-primary" onClick={() => setStep(3)}>Continue</button>
-      </div>
-    </>
-  );
-
-  if (step === 3) return wrap(
-    <>
-      <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 20, color: "var(--text-1)" }}>
-        Delivery schedule
-      </h2>
-      <TimeDay hour={hour} days={days} onHour={setHour} onDay={toggleDay} />
-      <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 10 }}>Sent on NSE market days only</p>
-      <div className="wizard-actions">
-        <button className="btn btn-ghost" onClick={() => setStep(2)}>Back</button>
-        <button className="btn btn-primary" onClick={() => setStep(4)} disabled={days.length === 0}>Continue</button>
-      </div>
-    </>
-  );
-
   return wrap(
     <>
       <div style={{ width: 48, height: 48, background: "var(--accent-subtle)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, color: "var(--accent)" }}>
@@ -329,9 +216,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
       <div className="surface-block" style={{ marginBottom: 18 }}>
         {([
           ["Sections",  presets.map(presetName).join(", ") || "None"],
-          ["Companies", companies.join(", ") || "None"],
-          ["Delivery",  fmtHour(hour) + " IST"],
-          ["Days",      fmtDays(days)],
+          ["Delivery",  "8 AM IST, every market day"],
         ] as [string, string][]).map(([k, v]) => (
           <div key={k} className="settings-row">
             <span className="settings-label">{k}</span>
@@ -344,7 +229,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
         Send a preview email now
       </label>
       <div className="wizard-actions">
-        <button className="btn btn-ghost" onClick={() => setStep(3)}>Back</button>
+        <button className="btn btn-ghost" onClick={() => setStep(1)}>Back</button>
         <button className="btn btn-accent" onClick={activate} disabled={saving}>
           {saving && <span className="spinner" />}
           Activate
@@ -384,7 +269,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
   async function sendPreview() {
     setSaving(true);
     try {
-      const res = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets: prefs.presets, companies: prefs.companies }) });
+      const res = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets: prefs.presets }) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Preview failed" }));
         show(err.error ?? "Failed to send preview email", "error");
@@ -424,9 +309,6 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
 
   function toggleDraftPreset(id: PresetType) {
     setDraft((prev) => ({ ...prev, presets: prev.presets.includes(id) ? prev.presets.filter((x) => x !== id) : prev.presets.length >= 2 ? prev.presets : [...prev.presets, id] }));
-  }
-  function toggleDraftDay(d: number) {
-    setDraft((prev) => ({ ...prev, schedule_days: prev.schedule_days.includes(d) ? prev.schedule_days.filter((x) => x !== d) : [...prev.schedule_days, d].sort((a, b) => a - b) }));
   }
 
   return (
@@ -472,9 +354,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
           {!editing ? (
             ([
               ["Sections",  prefs.presets.map(presetName).join(", ") || "None"],
-              ["Companies", prefs.companies.join(", ") || "None"],
-              ["Delivery",  fmtHour(prefs.delivery_hour) + " IST"],
-              ["Days",      fmtDays(prefs.schedule_days)],
+              ["Delivery",  "8 AM IST, every market day"],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="settings-row">
                 <span className="settings-label">{k}</span>
@@ -486,24 +366,6 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
               <p className="section-label" style={{ marginBottom: 10 }}>Sections (up to 2)</p>
               <div style={{ marginBottom: 20 }}>
                 <PresetGrid selected={draft.presets} onToggle={toggleDraftPreset} />
-              </div>
-              <p className="section-label" style={{ marginBottom: 10 }}>Companies (up to 3)</p>
-              <div style={{ marginBottom: 20 }}>
-                <TickerInput
-                  companies={draft.companies}
-                  onAdd={(c) => setDraft((p) => ({ ...p, companies: [...p.companies, c] }))}
-                  onRemove={(c) => setDraft((p) => ({ ...p, companies: p.companies.filter((x) => x !== c) }))}
-                  token={token}
-                />
-              </div>
-              <p className="section-label" style={{ marginBottom: 10 }}>Delivery</p>
-              <div style={{ marginBottom: 22 }}>
-                <TimeDay
-                  hour={draft.delivery_hour}
-                  days={draft.schedule_days}
-                  onHour={(h) => setDraft((p) => ({ ...p, delivery_hour: h }))}
-                  onDay={toggleDraftDay}
-                />
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button className="btn btn-accent" onClick={saveEdits} disabled={saving || draft.presets.length === 0}>
@@ -536,7 +398,6 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
                     </div>
                     <div className="brief-meta">
                       {(b.data.presets ?? []).map(presetName).join(", ")}
-                      {b.data.companies?.length > 0 ? " · " + b.data.companies.join(", ") : ""}
                     </div>
                   </div>
                   <div className="brief-caret">
@@ -575,9 +436,6 @@ export default function Home() {
           setPrefs({
             id: data.id,
             presets: data.presets ?? [],
-            companies: data.companies ?? [],
-            delivery_hour: data.delivery_hour ?? 8,
-            schedule_days: data.schedule_days ?? [1,2,3,4,5],
             is_active: data.is_active ?? false,
             setup_complete: true,
           });

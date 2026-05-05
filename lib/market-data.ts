@@ -456,6 +456,57 @@ export async function generatePresetSection(
   return htmlSection;
 }
 
+export async function generateTop3MoversSection(
+  embedToken: string,
+  sheetData: SheetData
+): Promise<string> {
+  const all = [...sheetData.stocks.entries()]
+    .map(([symbol, p]) => ({ symbol, ...p }))
+    .filter((e) => Math.abs(e.changePct) > 0);
+  all.sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+  const top3 = all.slice(0, 3);
+
+  if (top3.length === 0) {
+    return sectionHeader("Top 3 Movers") +
+      `<p style="font-size:13px;color:#6B7280;margin:0;">Market data unavailable — data reflects previous session close once markets open.</p>`;
+  }
+
+  const result = await analyze(
+    `You are an Indian equity market data analyst. For each stock below write exactly one concise sentence (max 18 words) explaining the price move using only observational language. No recommendations whatsoever.
+
+Format — one line per stock, no extra text:
+SYMBOL: One sentence observation.
+
+STRICTLY FORBIDDEN in any form: buy, sell, hold, long, short, position in, add, trim, avoid, accumulate, overweight, underweight, price target, stop loss, entry point, take profit. Use only: "watch", "monitor", "observe", "note".`,
+    top3.map((e) => `${e.symbol}: ${fmt(e.close, e.changePct)}`).join("\n"),
+    embedToken
+  );
+
+  const lines = (result.choices[0].message.content ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.includes(":"));
+
+  const rows = top3.map((e, i) => {
+    const matchLine = lines.find((l) => l.toUpperCase().startsWith(e.symbol));
+    const oneLiner = matchLine ? matchLine.split(":").slice(1).join(":").trim() : "";
+    const alt = i % 2 === 1;
+    const pctCell = e.changePct >= 0 ? (alt ? POS_ALT : POS) : (alt ? NEG_ALT : NEG);
+    return `<tr>
+      <td ${alt ? TD_ALT : TD}><strong>${e.symbol}</strong></td>
+      <td ${alt ? TD_ALT : TD}>${fmtClose(e.close)}</td>
+      <td ${pctCell}>${fmtPct(e.changePct)}</td>
+      <td ${alt ? TD_ALT : TD} style="font-size:12px;color:#6B7280;">${oneLiner}</td>
+    </tr>`;
+  }).join("");
+
+  const table = `<table ${TABLE_STYLE}><thead><tr>
+    <th ${TH}>Stock</th><th ${TH}>Price</th><th ${TH}>Change</th><th ${TH}>Note</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+
+  return sectionHeader("Top 3 Movers") + table;
+}
+
 export async function generateCompanySection(
   ticker: string,
   embedToken: string,

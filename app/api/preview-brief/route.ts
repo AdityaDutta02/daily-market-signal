@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   generatePresetSection,
-  generateCompanySection,
+  generateTop3MoversSection,
   PresetType,
 } from "@/lib/market-data";
 import { wrapEmailHtml } from "@/lib/email-template";
@@ -16,23 +16,19 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const presets: PresetType[] = body.presets ?? [];
-  const companies: string[] = body.companies ?? [];
 
-  if (presets.length === 0 && companies.length === 0) {
+  if (presets.length === 0) {
     return NextResponse.json(
-      { error: "Select at least one preset or company" },
+      { error: "Select at least one preset" },
       { status: 400 }
     );
   }
 
   try {
     const sheetData = await fetchSheetData(embedToken);
-    const sections: string[] = [];
+    const sections: string[] = [await generateTop3MoversSection(embedToken, sheetData)];
     for (const preset of presets) {
       sections.push(await generatePresetSection(preset, embedToken, sheetData, true));
-    }
-    for (const company of companies) {
-      sections.push(await generateCompanySection(company, embedToken, sheetData, true));
     }
 
     const date = new Date().toLocaleDateString("en-IN", {
