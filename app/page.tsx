@@ -2,15 +2,60 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useEmbedToken } from "@/hooks/use-embed-token";
-import {
-  CheckCircle,
-  X,
-  ArrowClockwise,
-  EnvelopeSimple,
-  PencilSimple,
-  ChartLineUp,
-  CaretRight,
-} from "@phosphor-icons/react";
+function IcoCheck() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 17 17" fill="currentColor" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="8.5" />
+      <path d="M5.5 8.5l2.2 2.2 3.8-3.8" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IcoX() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+      <line x1="2" y1="2" x2="9" y2="9" />
+      <line x1="9" y1="2" x2="2" y2="9" />
+    </svg>
+  );
+}
+function IcoRefresh() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13 7.5a5.5 5.5 0 11-1.5-3.8" />
+      <path d="M13 2v3.5h-3.5" />
+    </svg>
+  );
+}
+function IcoEnvelope() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.5" y="3.5" width="12" height="8.5" rx="1.5" />
+      <path d="M1.5 5l6 4.5L13.5 5" />
+    </svg>
+  );
+}
+function IcoPencil() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.5 2.5l2 2-8 8H2.5v-2l8-8z" />
+    </svg>
+  );
+}
+function IcoChart() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 11l3.5-4 2.5 2.5 5-6.5" />
+    </svg>
+  );
+}
+function IcoCaret({ open }: { open?: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 200ms cubic-bezier(0.16,1,0.3,1)" }}>
+      <path d="M5 3.5l3.5 3-3.5 3" />
+    </svg>
+  );
+}
 
 type PresetType = "nifty_movers" | "stocks_to_watch" | "sectoral_pulse" | "earnings_radar" | "macro_dashboard";
 
@@ -71,7 +116,7 @@ function PresetGrid({ selected, onToggle }: { selected: PresetType[]; onToggle: 
         <div key={p.id} className={`preset-card${selected.includes(p.id) ? " selected" : ""}`} onClick={() => onToggle(p.id)}>
           {selected.includes(p.id) && (
             <div className="preset-check">
-              <CheckCircle weight="fill" size={17} />
+              <IcoCheck />
             </div>
           )}
           <div className="preset-name">{p.name}</div>
@@ -128,7 +173,7 @@ function TickerInput({ companies, onAdd, onRemove, token }: { companies: string[
           <span key={c} className="chip">
             {c}
             <button className="chip-remove" onClick={() => onRemove(c)}>
-              <X size={11} weight="bold" />
+              <IcoX />
             </button>
           </span>
         ))}
@@ -213,7 +258,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
   if (step === 0) return wrap(
     <>
       <div style={{ width: 42, height: 42, background: "var(--text-1)", borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
-        <ChartLineUp size={20} weight="bold" color="white" />
+        <IcoChart />
       </div>
       <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: 12, color: "var(--text-1)" }}>
         Daily Market Signal
@@ -222,7 +267,7 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
         AI-powered Indian market brief, delivered to your inbox each morning before the bell.
       </p>
       <button className="btn btn-primary btn-full" onClick={() => setStep(1)}>
-        Get Started <CaretRight size={13} weight="bold" />
+        Get Started <IcoCaret />
       </button>
     </>
   );
@@ -273,7 +318,10 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
   return wrap(
     <>
       <div style={{ width: 48, height: 48, background: "var(--accent-subtle)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, color: "var(--accent)" }}>
-        <CheckCircle size={26} weight="fill" />
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="currentColor" aria-hidden="true">
+          <circle cx="13" cy="13" r="13" />
+          <path d="M8 13l3.5 3.5 6.5-7" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
       <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 18, color: "var(--text-1)" }}>
         Review and activate
@@ -388,7 +436,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
       <div className="dash-header">
         <div className="wordmark">
           <div className="wordmark-icon">
-            <ChartLineUp size={15} weight="bold" color="white" />
+            <IcoChart />
           </div>
           <span className="dash-title">Market Signal</span>
         </div>
@@ -404,13 +452,13 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
           {!editing && (
             <>
               <button className="btn-icon" onClick={refreshData} disabled={saving} title="Refresh market data">
-                <ArrowClockwise size={15} weight="bold" />
+                <IcoRefresh />
               </button>
               <button className="btn-icon" onClick={sendPreview} disabled={saving} title="Send preview email">
-                <EnvelopeSimple size={15} />
+                <IcoEnvelope />
               </button>
               <button className="btn-icon" onClick={() => { setDraft(prefs); setEditing(true); }} title="Edit settings">
-                <PencilSimple size={15} />
+                <IcoPencil />
               </button>
             </>
           )}
@@ -491,8 +539,8 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
                       {b.data.companies?.length > 0 ? " · " + b.data.companies.join(", ") : ""}
                     </div>
                   </div>
-                  <div className={`brief-caret${expandedId === b.id ? " open" : ""}`}>
-                    <CaretRight size={13} />
+                  <div className="brief-caret">
+                    <IcoCaret open={expandedId === b.id} />
                   </div>
                 </div>
                 {expandedId === b.id && (
