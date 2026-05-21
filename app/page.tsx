@@ -26,11 +26,26 @@ function IcoRefresh() {
     </svg>
   );
 }
-function IcoEnvelope() {
+function IcoPlay() {
   return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="1.5" y="3.5" width="12" height="8.5" rx="1.5" />
-      <path d="M1.5 5l6 4.5L13.5 5" />
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor" aria-hidden="true">
+      <path d="M2.5 1.5v8l7-4z" />
+    </svg>
+  );
+}
+function IcoPause() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor" aria-hidden="true">
+      <rect x="2" y="1.5" width="2.5" height="8" rx="0.5" />
+      <rect x="6.5" y="1.5" width="2.5" height="8" rx="0.5" />
+    </svg>
+  );
+}
+function IcoClose() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <line x1="3" y1="3" x2="10" y2="10" />
+      <line x1="10" y1="3" x2="3" y2="10" />
     </svg>
   );
 }
@@ -241,14 +256,17 @@ function SetupWizard({ token, onComplete, show }: { token: string; onComplete: (
   );
 }
 
+const PAGE_SIZE = 8;
+
 function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; show: (m: string, t?: "success" | "error") => void }) {
   const [prefs, setPrefs] = useState<Prefs>(init);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Prefs>(init);
   const [briefs, setBriefs] = useState<Brief[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Values in expandedHtml are always sanitized via DOMPurify before insertion (see sanitizeHtml).
-  const [expandedHtml, setExpandedHtml] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Sanitized via DOMPurify before storage in state.
+  const [selectedHtml, setSelectedHtml] = useState<string>("");
+  const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
 
@@ -268,19 +286,6 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
     } catch { show("Failed to save.", "error"); } finally { setSaving(false); }
   }
 
-  async function sendPreview() {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/preview-brief", { method: "POST", headers: ah(token), body: JSON.stringify({ presets: prefs.presets }) });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Preview failed" }));
-        show(err.error ?? "Failed to send preview email", "error");
-      } else {
-        show("Preview sent to your email!");
-      }
-    } catch { show("Failed to send preview.", "error"); } finally { setSaving(false); }
-  }
-
   async function refreshData() {
     setSaving(true);
     try {
@@ -296,25 +301,28 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
     try {
       const updated = { ...prefs, is_active: !prefs.is_active };
       await fetch("/api/preferences", { method: "POST", headers: ah(token), body: JSON.stringify({ ...updated, setup_complete: true }) });
-      setPrefs(updated); show(updated.is_active ? "Brief activated." : "Brief paused.");
+      setPrefs(updated); show(updated.is_active ? "Reports activated." : "Reports paused.");
     } catch { show("Failed to update status.", "error"); } finally { setToggling(false); }
   }
 
-  async function expandBrief(b: Brief) {
-    if (expandedId === b.id) { setExpandedId(null); return; }
-    setExpandedId(b.id);
-    if (!expandedHtml[b.id]) {
-      const clean = await sanitizeHtml(b.brief_html ?? "");
-      setExpandedHtml((prev) => ({ ...prev, [b.id]: clean }));
-    }
+  async function selectBrief(b: Brief) {
+    setSelectedId(b.id);
+    setSelectedHtml("");
+    const clean = await sanitizeHtml(b.brief_html ?? "");
+    setSelectedHtml(clean);
   }
 
   function toggleDraftPreset(id: PresetType) {
     setDraft((prev) => ({ ...prev, presets: prev.presets.includes(id) ? prev.presets.filter((x) => x !== id) : prev.presets.length >= 2 ? prev.presets : [...prev.presets, id] }));
   }
 
+  const totalPages = Math.max(1, Math.ceil(briefs.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageBriefs = briefs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const selected = briefs.find((b) => b.id === selectedId) ?? null;
+
   return (
-    <div className="app-container stagger">
+    <div className={`app-container${selected ? " split" : ""} stagger`}>
 
       {/* Header */}
       <div className="dash-header">
@@ -322,24 +330,22 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
           <div className="wordmark-icon">
             <IcoChart />
           </div>
-          <span className="dash-title">Market Signal</span>
+          <span className="dash-title">Daily Market Signal</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <button
-            className={`status-pill${prefs.is_active ? " active" : " paused"}`}
+            className={`pause-btn${prefs.is_active ? " active" : " paused"}`}
             onClick={toggleActive}
             disabled={toggling}
+            title={prefs.is_active ? "Pause daily reports" : "Resume daily reports"}
           >
-            <span className="status-dot" />
-            {prefs.is_active ? "Active" : "Paused"}
+            {toggling ? <span className="spinner spinner-dark" /> : prefs.is_active ? <IcoPause /> : <IcoPlay />}
+            {prefs.is_active ? "Pause" : "Activate"}
           </button>
           {!editing && (
             <>
               <button className="btn-icon" onClick={refreshData} disabled={saving} title="Refresh market data">
                 <IcoRefresh />
-              </button>
-              <button className="btn-icon" onClick={sendPreview} disabled={saving} title="Send preview email">
-                <IcoEnvelope />
               </button>
               <button className="btn-icon" onClick={() => { setDraft(prefs); setEditing(true); }} title="Edit settings">
                 <IcoPencil />
@@ -349,75 +355,116 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
         </div>
       </div>
 
-      {/* Schedule section */}
-      <div style={{ marginBottom: 20 }}>
-        <p className="section-label">Schedule</p>
-        <div className="surface-block">
-          {!editing ? (
-            ([
-              ["Sections",  prefs.presets.map(presetName).join(", ") || "None"],
-              ["Delivery",  "8 AM IST, every market day"],
-            ] as [string, string][]).map(([k, v]) => (
-              <div key={k} className="settings-row">
-                <span className="settings-label">{k}</span>
-                <span className="settings-value">{v}</span>
-              </div>
-            ))
-          ) : (
-            <div className="edit-form">
-              <p className="section-label" style={{ marginBottom: 10 }}>Sections (up to 2)</p>
-              <div style={{ marginBottom: 20 }}>
-                <PresetGrid selected={draft.presets} onToggle={toggleDraftPreset} />
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button className="btn btn-accent" onClick={saveEdits} disabled={saving || draft.presets.length === 0}>
-                  {saving && <span className="spinner" />}
-                  Save changes
-                </button>
-                <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* History section */}
-      <div>
-        <p className="section-label">History</p>
-        <div className="surface-block">
-          {briefs.length === 0 ? (
-            <div className="empty-state">
-              <p>No briefs sent yet.</p>
-              <p style={{ marginTop: 4, fontSize: 12 }}>Your first brief arrives on the next scheduled morning.</p>
-            </div>
-          ) : (
-            briefs.map((b) => (
-              <div key={b.id} className="brief-item" onClick={() => expandBrief(b)}>
-                <div className="brief-row">
-                  <div>
-                    <div className="brief-date">
-                      {new Date(b.sent_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
-                    </div>
-                    <div className="brief-meta">
-                      {(b.presets ?? []).map(presetName).join(", ")}
-                    </div>
+      <div className="dash-grid">
+        <div className="dash-left">
+          <div style={{ marginBottom: 20 }}>
+            <p className="section-label">Schedule</p>
+            <div className="surface-block">
+              {!editing ? (
+                ([
+                  ["Sections",  prefs.presets.map(presetName).join(", ") || "None"],
+                  ["Delivery",  "8 AM IST, every market day"],
+                  ["Status",    prefs.is_active ? "Active" : "Paused"],
+                ] as [string, string][]).map(([k, v]) => (
+                  <div key={k} className="settings-row">
+                    <span className="settings-label">{k}</span>
+                    <span className="settings-value">{v}</span>
                   </div>
-                  <div className="brief-caret">
-                    <IcoCaret open={expandedId === b.id} />
+                ))
+              ) : (
+                <div className="edit-form">
+                  <p className="section-label" style={{ marginBottom: 10 }}>Sections (up to 2)</p>
+                  <div style={{ marginBottom: 20 }}>
+                    <PresetGrid selected={draft.presets} onToggle={toggleDraftPreset} />
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button className="btn btn-accent" onClick={saveEdits} disabled={saving || draft.presets.length === 0}>
+                      {saving && <span className="spinner" />}
+                      Save changes
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
                   </div>
                 </div>
-                {expandedId === b.id && (
-                  /* Content sanitized via DOMPurify before being stored in expandedHtml state */
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="section-label">History</p>
+            <div className="surface-block">
+              {briefs.length === 0 ? (
+                <div className="empty-state">
+                  <p>No briefs sent yet.</p>
+                  <p style={{ marginTop: 4, fontSize: 12 }}>Your first brief arrives on the next scheduled morning.</p>
+                </div>
+              ) : (
+                pageBriefs.map((b) => (
                   <div
-                    className="brief-content"
-                    onClick={(e) => e.stopPropagation()}
-                    dangerouslySetInnerHTML={{ __html: expandedHtml[b.id] ?? "<p>Loading...</p>" }}
-                  />
-                )}
+                    key={b.id}
+                    className={`brief-item${selectedId === b.id ? " selected" : ""}`}
+                    onClick={() => selectBrief(b)}
+                  >
+                    <div className="brief-row">
+                      <div>
+                        <div className="brief-date">
+                          {new Date(b.sent_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </div>
+                        <div className="brief-meta">
+                          {(b.presets ?? []).map(presetName).join(", ")}
+                        </div>
+                      </div>
+                      <div className="brief-caret">
+                        <IcoCaret open={selectedId === b.id} />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {briefs.length > PAGE_SIZE && (
+              <div className="pagination">
+                <button
+                  className="btn-ghost-sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                >
+                  Prev
+                </button>
+                <span className="page-info">Page {safePage} of {totalPages}</span>
+                <button
+                  className="btn-ghost-sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                >
+                  Next
+                </button>
               </div>
-            ))
-          )}
+            )}
+          </div>
         </div>
+
+        {selected && (
+          <div className="dash-right">
+            <div className="viewer-panel">
+              <div className="viewer-header">
+                <div>
+                  <div className="viewer-date">
+                    {new Date(selected.sent_at).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                  </div>
+                  <div className="viewer-meta">{(selected.presets ?? []).map(presetName).join(", ")}</div>
+                </div>
+                <button className="btn-icon" onClick={() => setSelectedId(null)} title="Close report">
+                  <IcoClose />
+                </button>
+              </div>
+              {/* selectedHtml is sanitized via DOMPurify (sanitizeHtml) before being stored in state */}
+              <div
+                className="brief-content viewer-content"
+                dangerouslySetInnerHTML={{ __html: selectedHtml || "<p style='color:var(--text-3);font-size:13px'>Loading…</p>" }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
