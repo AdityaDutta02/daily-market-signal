@@ -68,7 +68,9 @@ interface Prefs {
 
 interface Brief {
   id: string;
-  data: { presets: PresetType[]; brief_html: string; sent_at: string };
+  presets: PresetType[];
+  brief_html: string;
+  sent_at: string;
 }
 
 const PRESETS: { id: PresetType; name: string; description: string }[] = [
@@ -302,7 +304,7 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
     if (expandedId === b.id) { setExpandedId(null); return; }
     setExpandedId(b.id);
     if (!expandedHtml[b.id]) {
-      const clean = await sanitizeHtml(b.data.brief_html ?? "");
+      const clean = await sanitizeHtml(b.brief_html ?? "");
       setExpandedHtml((prev) => ({ ...prev, [b.id]: clean }));
     }
   }
@@ -394,10 +396,10 @@ function Dashboard({ prefs: init, token, show }: { prefs: Prefs; token: string; 
                 <div className="brief-row">
                   <div>
                     <div className="brief-date">
-                      {new Date(b.data.sent_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                      {new Date(b.sent_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                     </div>
                     <div className="brief-meta">
-                      {(b.data.presets ?? []).map(presetName).join(", ")}
+                      {(b.presets ?? []).map(presetName).join(", ")}
                     </div>
                   </div>
                   <div className="brief-caret">
