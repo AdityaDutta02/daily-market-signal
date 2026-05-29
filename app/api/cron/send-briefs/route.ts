@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   if (matchingUsers.length === 0) {
     return NextResponse.json({
       skipped: true,
-      reason: "No users scheduled for this hour",
+      reason: "No active subscribers",
     });
   }
 
@@ -73,27 +73,33 @@ export async function POST(request: NextRequest) {
     });
     const html = wrapEmailHtml(sections, date);
 
-    await sendEmail(
-      `Daily Market Signal - ${date}`,
-      html,
-      embedToken
-    );
+    try {
+      await sendEmail(
+        `Daily Market Signal - ${date}`,
+        html,
+        embedToken,
+        { recipientUserId: userId },
+      );
 
-    await dbInsert(
-      "items",
-      {
-        data: {
-          type: "email_log",
-          user_id: userId,
-          presets,
-          brief_html: html,
-          sent_at: new Date().toISOString(),
+      await dbInsert(
+        "items",
+        {
+          data: {
+            type: "email_log",
+            user_id: userId,
+            presets,
+            brief_html: html,
+            sent_at: new Date().toISOString(),
+          },
         },
-      },
-      embedToken
-    );
+        embedToken
+      );
 
-    sent.push(userId);
+      sent.push(userId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      skipped.push(`${userId}: ${message}`);
+    }
   }
 
   return NextResponse.json({ sent: sent.length, users: sent, skipped });
