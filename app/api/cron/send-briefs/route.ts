@@ -48,32 +48,53 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Fetch market data once for all users in this batch
-  const sheetData = await fetchSheetData(embedToken);
-
   const sent: string[] = [];
   const skipped: string[] = [];
 
-  const top3Section = await generateTop3MoversSection(embedToken, sheetData);
+  let sheetData: Awaited<ReturnType<typeof fetchSheetData>>;
+  let top3Section: string;
+  try {
+    sheetData = await fetchSheetData(embedToken);
+    top3Section = await generateTop3MoversSection(embedToken, sheetData);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await dbInsert(
+      "items",
+      {
+        data: {
+          type: "cron_error",
+          source: "send-briefs:prelude",
+          message,
+          ts: new Date().toISOString(),
+        },
+      },
+      embedToken,
+    ).catch(() => {});
+    return NextResponse.json(
+      { error: `prelude failed: ${message}` },
+      { status: 200 }, // 200 so the gateway doesn't mark the cron failed and hide the body
+    );
+  }
+
+  const errors: string[] = [];
 
   for (const user of matchingUsers) {
-    const presets = (user.data.presets as PresetType[]) ?? [];
     const userId = user.data.user_id as string;
-
-    const sections: string[] = [top3Section];
-    for (const preset of presets) {
-      sections.push(await generatePresetSection(preset, embedToken, sheetData));
-    }
-
-    const date = istDate.toLocaleDateString("en-IN", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-    const html = wrapEmailHtml(sections, date);
-
     try {
+      const presets = (user.data.presets as PresetType[]) ?? [];
+      const sections: string[] = [top3Section];
+      for (const preset of presets) {
+        sections.push(await generatePresetSection(preset, embedToken, sheetData));
+      }
+
+      const date = istDate.toLocaleDateString("en-IN", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const html = wrapEmailHtml(sections, date);
+
       await sendEmail(
         `Daily Market Signal - ${date}`,
         html,
@@ -92,15 +113,33 @@ export async function POST(request: NextRequest) {
             sent_at: new Date().toISOString(),
           },
         },
-        embedToken
+        embedToken,
       );
 
       sent.push(userId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      skipped.push(`${userId}: ${message}`);
+      errors.push(`${userId}: ${message}`);
+      // Persist for post-mortem since runtime logs are not retrievable.
+      try {
+        await dbInsert(
+          "items",
+          {
+            data: {
+              type: "cron_error",
+              source: "send-briefs",
+              user_id: userId,
+              message,
+              ts: new Date().toISOString(),
+            },
+          },
+          embedToken,
+        );
+      } catch {
+        // Swallow secondary failure; primary error already captured in response.
+      }
     }
   }
 
-  return NextResponse.json({ sent: sent.length, users: sent, skipped });
+  return NextResponse.json({ sent: sent.length, users: sent, skipped, errors });
 }
